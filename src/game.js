@@ -36,13 +36,14 @@ export class GameSystem extends System {
 	}
 
 	_initializeProperties() {
+		this._activeLevel = Constants.LEVELS[Constants.DEFAULT_LEVEL_ID];
 		this._flapData = {
 			left: { y: null, distance: 0, flaps: 0 },
 			right: { y: null, distance: 0, flaps: 0 },
 		};
 		this._ring = null;
 		this._ringNumber = null;
-		this._ringTimer = Constants.RING_INTERVAL;
+		this._ringTimer = this._activeLevel.ringInterval;
 		this._scoreBoard = null;
 		this._playerId = null;
 		this._record = null;
@@ -51,6 +52,7 @@ export class GameSystem extends System {
 		this._recordScore = createText(2);
 		this._worldRecord = createText(0);
 		this._ranking = createText(0);
+		this._levelName = createText(this._activeLevel.name, 0.09);
 	}
 
 	_loadStoredData() {
@@ -98,6 +100,7 @@ export class GameSystem extends System {
 			this._addTextToScoreBoard(this._recordScore, -0.15, -0.36);
 			this._addTextToScoreBoard(this._ranking, 0.8, -0.22);
 			this._addTextToScoreBoard(this._worldRecord, 0.8, -0.36);
+			this._addTextToScoreBoard(this._levelName, 0.33, 0.2);
 		}
 	}
 
@@ -107,6 +110,14 @@ export class GameSystem extends System {
 	}
 
 	_manageGameStates(global, player, delta) {
+		this._activeLevel =
+			global.level || Constants.LEVELS[Constants.DEFAULT_LEVEL_ID];
+
+		if (this._levelName && this._levelName.text !== this._activeLevel.name) {
+			this._levelName.text = this._activeLevel.name;
+			this._levelName.sync();
+		}
+
 		const isPresenting = global.renderer.xr.isPresenting;
 		const rotator = player.space.parent;
 		this._scoreBoard.visible = false;
@@ -129,10 +140,10 @@ export class GameSystem extends System {
 		this._ring.position.set(0, 4, 34);
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			Constants.PLAYER_ANGULAR_SPEED * Constants.RING_INTERVAL,
+			Constants.PLAYER_ANGULAR_SPEED * this._activeLevel.ringInterval,
 		);
 		this._ring.position.y = player.space.position.y;
-		this._ring.scale.setScalar(Constants.STARTING_RING_SCALE);
+		this._ring.scale.setScalar(this._activeLevel.startingRingScale);
 
 		const ringNumber = new Text();
 		this._ring.add(ringNumber);
@@ -195,11 +206,11 @@ export class GameSystem extends System {
 		};
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			Constants.PLAYER_ANGULAR_SPEED * Constants.RING_INTERVAL,
+			Constants.PLAYER_ANGULAR_SPEED * this._activeLevel.ringInterval,
 		);
 		this._ring.position.y = 4;
-		this._ring.scale.setScalar(Constants.STARTING_RING_SCALE);
-		this._ringTimer = Constants.RING_INTERVAL;
+		this._ring.scale.setScalar(this._activeLevel.startingRingScale);
+		this._ringTimer = this._activeLevel.ringInterval;
 		this._ringNumber.text = '1';
 		this._ringNumber.sync();
 	}
@@ -226,11 +237,12 @@ export class GameSystem extends System {
 		this._ringNumber.sync();
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			Constants.PLAYER_ANGULAR_SPEED * Constants.RING_INTERVAL,
+			Constants.PLAYER_ANGULAR_SPEED * this._activeLevel.ringInterval,
 		);
-		this._ring.position.y = Math.random() * 5 + 4;
-		this._ring.scale.multiplyScalar(0.98);
-		this._ringTimer = Constants.RING_INTERVAL;
+		const yRange = this._activeLevel.ringMaxY - this._activeLevel.ringMinY;
+		this._ring.position.y = Math.random() * yRange + this._activeLevel.ringMinY;
+		this._ring.scale.multiplyScalar(this._activeLevel.ringShrinkMultiplier);
+		this._ringTimer = this._activeLevel.ringInterval;
 	}
 
 	_endGame(player, global) {
@@ -259,10 +271,10 @@ GameSystem.queries = {
  * @param {number} defaultValue - The default value for the text.
  * @returns {Text} - The created text mesh.
  */
-const createText = (defaultValue) => {
+const createText = (defaultValue, fontSize = 0.12) => {
 	const text = new Text();
 	text.text = defaultValue.toString();
-	text.fontSize = 0.12;
+	text.fontSize = fontSize;
 	text.anchorX = 'center';
 	text.anchorY = 'middle';
 	text.sync();

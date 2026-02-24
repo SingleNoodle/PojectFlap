@@ -24,6 +24,15 @@ Welcome to Flap Frenzy, an immersive and interactive WebXR experience. In this g
 - **Dive**: Tuck your arms to dive and lose altitude quickly.
 - **Objective**: Pass through as many target rings as possible. The rings decrease in size as you advance, increasing the difficulty.
 
+### Level Selection
+
+- **Default Level**: The game starts in `level-1` (Classic Skies).
+- **New Level**: Use `level-2` (Narrow Canyon) for faster ring timing and tighter ring sizes.
+- **How to Launch**: Add a `level` query parameter to the URL, for example:
+   - `http://localhost:10001/?level=level-2`
+
+The selected level is saved in browser local storage and reused on your next launch.
+
 ## Getting Started
 
 To set up your development environment and start playing Flap Frenzy, follow these steps:

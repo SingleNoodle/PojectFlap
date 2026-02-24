@@ -19,10 +19,28 @@ export const Constants = {
 	// game constants
 	NUM_FLAPS_TO_START_GAME: 3,
 	PLAYER_ANGULAR_SPEED: Math.PI / 25,
-	RING_INTERVAL: 3,
-	STARTING_RING_SCALE: 5,
 	GRAVITY: -9.81,
 	FLAP_SPEED_MULTIPLIER: 0.1,
+	DEFAULT_LEVEL_ID: 'level-1',
+	LEVEL_PARAM_KEY: 'level',
+	LEVELS: {
+		'level-1': {
+			name: 'Classic Skies',
+			ringInterval: 3,
+			startingRingScale: 5,
+			ringShrinkMultiplier: 0.98,
+			ringMinY: 4,
+			ringMaxY: 9,
+		},
+		'level-2': {
+			name: 'Narrow Canyon',
+			ringInterval: 2.25,
+			startingRingScale: 4,
+			ringShrinkMultiplier: 0.96,
+			ringMinY: 3,
+			ringMaxY: 10,
+		},
+	},
 
 	// asset paths
 	SCORE_BOARD_TEXTURE_PATH: 'assets/scoreboard.png',
@@ -33,4 +51,5 @@ export const Constants = {
 	// local storage keys
 	RECORD_SCORE_KEY: 'record-score',
 	PLAYER_ID_KEY: 'player-id',
+	SELECTED_LEVEL_KEY: 'selected-level',
 };
