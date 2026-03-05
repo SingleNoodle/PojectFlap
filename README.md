@@ -33,6 +33,16 @@ Welcome to Flap Frenzy, an immersive and interactive WebXR experience. In this g
 
 The selected level is saved in browser local storage and reused on your next launch.
 
+### Comfort Mode (Motion Sickness Reduction)
+
+- **Enable Comfort Mode**: Add `comfort=1` to the URL to reduce motion intensity.
+- **Disable Comfort Mode**: Use `comfort=0`.
+- **Examples**:
+   - `http://localhost:10001/?comfort=1`
+   - `http://localhost:10001/?level=level-2&comfort=1`
+
+Comfort mode reduces angular rotation speed, softens gravity, and lowers flap impulse to make movement less abrupt. Your last comfort setting is saved in browser local storage. If you have reduced-motion enabled in your OS/browser and no comfort query is provided, comfort mode will auto-enable.
+
 ## Getting Started
 
 To set up your development environment and start playing Flap Frenzy, follow these steps:

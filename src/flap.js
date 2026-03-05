@@ -48,6 +48,8 @@ export class FlapSystem extends System {
 		const global = this.getEntities(this.queries.global)[0].getComponent(
 			GlobalComponent,
 		);
+		const motionProfile =
+			global.motionProfile || Constants.MOTION_PROFILES.default;
 
 		const player = this.getEntities(this.queries.player)[0]?.getComponent(
 			PlayerComponent,
@@ -57,11 +59,11 @@ export class FlapSystem extends System {
 			this._init(player.space, global.scene, global.gltfLoader);
 		}
 
-		this._rotator.rotateY(Constants.PLAYER_ANGULAR_SPEED * delta);
+		this._rotator.rotateY(motionProfile.angularSpeed * delta);
 		const isPresenting = global.renderer.xr.isPresenting;
 
 		if (isPresenting) {
-			this._handleVRMode(player, global, delta);
+			this._handleVRMode(player, global, delta, motionProfile);
 		} else {
 			this._handleNonVRMode(player);
 		}
@@ -69,7 +71,7 @@ export class FlapSystem extends System {
 		this._manageRings(delta);
 	}
 
-	_handleVRMode(player, global, delta) {
+	_handleVRMode(player, global, delta, motionProfile) {
 		let flapSpeed = 0;
 		let wingAngle = 0;
 
@@ -88,11 +90,14 @@ export class FlapSystem extends System {
 			}
 		});
 
-		let gravityAdjusted = this._adjustGravityBasedOnWingAngle(wingAngle);
+		let gravityAdjusted = this._adjustGravityBasedOnWingAngle(
+			wingAngle,
+			motionProfile.gravity,
+		);
 
 		if (global.gameState === 'ingame') {
 			this._vertSpeed +=
-				gravityAdjusted * delta + flapSpeed * Constants.FLAP_SPEED_MULTIPLIER;
+				gravityAdjusted * delta + flapSpeed * motionProfile.flapSpeedMultiplier;
 			player.space.position.y += this._vertSpeed * delta;
 
 			if (player.space.position.y <= 0) {
@@ -138,8 +143,8 @@ export class FlapSystem extends System {
 		return Math.atan(Math.abs(this._vec3.y) / Math.abs(this._vec3.x));
 	}
 
-	_adjustGravityBasedOnWingAngle(wingAngle) {
-		let gravityAdjusted = Constants.GRAVITY;
+	_adjustGravityBasedOnWingAngle(wingAngle, gravity) {
+		let gravityAdjusted = gravity;
 		if (wingAngle < 0.2) {
 			gravityAdjusted *= 0.5;
 		} else if (wingAngle < 0.5) {

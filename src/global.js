@@ -21,6 +21,20 @@ export const Constants = {
 	PLAYER_ANGULAR_SPEED: Math.PI / 25,
 	GRAVITY: -9.81,
 	FLAP_SPEED_MULTIPLIER: 0.1,
+	MOTION_PARAM_KEY: 'comfort',
+	COMFORT_MODE_KEY: 'comfort-mode',
+	MOTION_PROFILES: {
+		default: {
+			angularSpeed: Math.PI / 25,
+			gravity: -9.81,
+			flapSpeedMultiplier: 0.1,
+		},
+		comfort: {
+			angularSpeed: Math.PI / 35,
+			gravity: -7.2,
+			flapSpeedMultiplier: 0.075,
+		},
+	},
 	DEFAULT_LEVEL_ID: 'level-1',
 	LEVEL_PARAM_KEY: 'level',
 	LEVELS: {
@@ -50,6 +64,7 @@ export const Constants = {
 
 	// local storage keys
 	RECORD_SCORE_KEY: 'record-score',
+	LATEST_SCORE_KEY: 'latest-score',
 	PLAYER_ID_KEY: 'player-id',
 	SELECTED_LEVEL_KEY: 'selected-level',
 };

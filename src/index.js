@@ -37,6 +37,38 @@ const getSelectedLevelId = () => {
 	return Constants.DEFAULT_LEVEL_ID;
 };
 
+const getMotionProfile = () => {
+	const queryValue = new URLSearchParams(window.location.search).get(
+		Constants.MOTION_PARAM_KEY,
+	);
+
+	if (queryValue !== null) {
+		const isComfort = queryValue === '1' || queryValue.toLowerCase() === 'true';
+		localStorage.setItem(Constants.COMFORT_MODE_KEY, isComfort ? '1' : '0');
+		return isComfort
+			? Constants.MOTION_PROFILES.comfort
+			: Constants.MOTION_PROFILES.default;
+	}
+
+	const savedPreference = localStorage.getItem(Constants.COMFORT_MODE_KEY);
+	if (savedPreference === '1' || savedPreference === '0') {
+		return savedPreference === '1'
+			? Constants.MOTION_PROFILES.comfort
+			: Constants.MOTION_PROFILES.default;
+	}
+
+	const reducedMotionPreferred =
+		typeof window.matchMedia === 'function' &&
+		window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+	if (reducedMotionPreferred) {
+		localStorage.setItem(Constants.COMFORT_MODE_KEY, '1');
+		return Constants.MOTION_PROFILES.comfort;
+	}
+
+	return Constants.MOTION_PROFILES.default;
+};
+
 // Create the world with the defined systems and components
 const world = new World();
 world
@@ -53,6 +85,7 @@ const { scene, camera, renderer, gltfLoader } = setupScene();
 
 // Create a global entity to store references to the renderer, camera, and scene
 const selectedLevelId = getSelectedLevelId();
+const motionProfile = getMotionProfile();
 
 world.createEntity().addComponent(GlobalComponent, {
 	renderer,
@@ -63,6 +96,7 @@ world.createEntity().addComponent(GlobalComponent, {
 	gameState: 'lobby',
 	levelId: selectedLevelId,
 	level: Constants.LEVELS[selectedLevelId],
+	motionProfile,
 });
 
 // Set the animation loop for rendering and game logic

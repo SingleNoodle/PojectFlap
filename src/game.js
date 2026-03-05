@@ -32,6 +32,7 @@ SCORE_BOARD_TEXTURE.colorSpace = SRGBColorSpace;
 export class GameSystem extends System {
 	init() {
 		this._initializeProperties();
+		this._cacheScoreboardElements();
 		this._loadStoredData();
 	}
 
@@ -46,7 +47,12 @@ export class GameSystem extends System {
 		this._ringTimer = this._activeLevel.ringInterval;
 		this._scoreBoard = null;
 		this._playerId = null;
-		this._record = null;
+		this._record = 0;
+		this._latest = 0;
+		this._currentRunScore = 0;
+		this._highestScoreElement = null;
+		this._latestScoreElement = null;
+		this._currentScoreElement = null;
 
 		this._currentScore = createText(0);
 		this._recordScore = createText(2);
@@ -55,14 +61,32 @@ export class GameSystem extends System {
 		this._levelName = createText(this._activeLevel.name, 0.09);
 	}
 
+	_cacheScoreboardElements() {
+		this._highestScoreElement = document.getElementById('highest-score-value');
+		this._latestScoreElement = document.getElementById('latest-score-value');
+		this._currentScoreElement = document.getElementById('current-score-value');
+		this._updateScoreboardUI();
+	}
+
 	_loadStoredData() {
 		localforage.getItem(Constants.RECORD_SCORE_KEY).then((score) => {
-			if (score) {
+			if (typeof score === 'number') {
 				this._recordScore.text = score.toString();
 				this._record = score;
 				this._recordScore.sync();
+				this._updateScoreboardUI();
 			}
 		});
+
+		localforage.getItem(Constants.LATEST_SCORE_KEY).then((score) => {
+			if (typeof score === 'number') {
+				this._latest = score;
+				this._currentScore.text = score.toString();
+				this._currentScore.sync();
+				this._updateScoreboardUI();
+			}
+		});
+
 		localforage.getItem(Constants.PLAYER_ID_KEY).then((playerId) => {
 			if (playerId) {
 				this._playerId = playerId;
@@ -71,6 +95,20 @@ export class GameSystem extends System {
 				localforage.setItem(Constants.PLAYER_ID_KEY, this._playerId);
 			}
 		});
+	}
+
+	_updateScoreboardUI() {
+		if (this._highestScoreElement) {
+			this._highestScoreElement.textContent = this._record.toString();
+		}
+
+		if (this._latestScoreElement) {
+			this._latestScoreElement.textContent = this._latest.toString();
+		}
+
+		if (this._currentScoreElement) {
+			this._currentScoreElement.textContent = this._currentRunScore.toString();
+		}
 	}
 
 	update(delta) {
@@ -112,6 +150,8 @@ export class GameSystem extends System {
 	_manageGameStates(global, player, delta) {
 		this._activeLevel =
 			global.level || Constants.LEVELS[Constants.DEFAULT_LEVEL_ID];
+		const motionProfile =
+			global.motionProfile || Constants.MOTION_PROFILES.default;
 
 		if (this._levelName && this._levelName.text !== this._activeLevel.name) {
 			this._levelName.text = this._activeLevel.name;
@@ -123,24 +163,24 @@ export class GameSystem extends System {
 		this._scoreBoard.visible = false;
 
 		if (!this._ring && global.scene.getObjectByName('ring')) {
-			this._initializeRing(player, global, rotator);
+			this._initializeRing(player, global, rotator, motionProfile);
 		}
 
 		if (global.gameState === 'lobby') {
-			this._handleLobbyState(player, rotator, isPresenting, global);
+			this._handleLobbyState(player, rotator, isPresenting, global, motionProfile);
 		} else {
-			this._handleInGameState(player, global, rotator, delta);
+			this._handleInGameState(player, global, rotator, delta, motionProfile);
 		}
 	}
 
-	_initializeRing(player, global, rotator) {
+	_initializeRing(player, global, rotator, motionProfile) {
 		this._ring = global.scene.getObjectByName('ring');
 		this._ringRotator = new Group();
 		this._ringRotator.add(this._ring);
 		this._ring.position.set(0, 4, 34);
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			Constants.PLAYER_ANGULAR_SPEED * this._activeLevel.ringInterval,
+			motionProfile.angularSpeed * this._activeLevel.ringInterval,
 		);
 		this._ring.position.y = player.space.position.y;
 		this._ring.scale.setScalar(this._activeLevel.startingRingScale);
@@ -158,7 +198,7 @@ export class GameSystem extends System {
 		global.scene.add(this._ringRotator);
 	}
 
-	_handleLobbyState(player, rotator, isPresenting, global) {
+	_handleLobbyState(player, rotator, isPresenting, global, motionProfile) {
 		if (isPresenting) {
 			this._scoreBoard.visible = true;
 			for (let entry of Object.entries(player.controllers)) {
@@ -171,7 +211,7 @@ export class GameSystem extends System {
 				if (
 					this._flapData[handedness].flaps >= Constants.NUM_FLAPS_TO_START_GAME
 				) {
-					this._startGame(global, rotator);
+					this._startGame(global, rotator, motionProfile);
 					break;
 				}
 			}
@@ -197,8 +237,10 @@ export class GameSystem extends System {
 		this._flapData[handedness].y = thisFrameY;
 	}
 
-	_startGame(global, rotator) {
+	_startGame(global, rotator, motionProfile) {
 		global.gameState = 'ingame';
+		this._currentRunScore = 0;
+		this._updateScoreboardUI();
 		this._ringTimer;
 		this._flapData = {
 			left: { y: null, distance: 0, flaps: 0 },
@@ -206,7 +248,7 @@ export class GameSystem extends System {
 		};
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			Constants.PLAYER_ANGULAR_SPEED * this._activeLevel.ringInterval,
+			motionProfile.angularSpeed * this._activeLevel.ringInterval,
 		);
 		this._ring.position.y = 4;
 		this._ring.scale.setScalar(this._activeLevel.startingRingScale);
@@ -215,7 +257,7 @@ export class GameSystem extends System {
 		this._ringNumber.sync();
 	}
 
-	_handleInGameState(player, global, rotator, delta) {
+	_handleInGameState(player, global, rotator, delta, motionProfile) {
 		if (this._ring) {
 			this._ringTimer -= delta;
 			if (this._ringTimer < 0) {
@@ -223,7 +265,7 @@ export class GameSystem extends System {
 				if (
 					Math.abs(player.space.position.y - this._ring.position.y) < ringRadius
 				) {
-					this._updateScore(global, rotator);
+					this._updateScore(global, rotator, motionProfile);
 				} else {
 					this._endGame(player, global);
 				}
@@ -231,13 +273,15 @@ export class GameSystem extends System {
 		}
 	}
 
-	_updateScore(global, rotator) {
+	_updateScore(global, rotator, motionProfile) {
 		global.score += 1;
+		this._currentRunScore = global.score;
+		this._updateScoreboardUI();
 		this._ringNumber.text = (global.score + 1).toString();
 		this._ringNumber.sync();
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			Constants.PLAYER_ANGULAR_SPEED * this._activeLevel.ringInterval,
+			motionProfile.angularSpeed * this._activeLevel.ringInterval,
 		);
 		const yRange = this._activeLevel.ringMaxY - this._activeLevel.ringMinY;
 		this._ring.position.y = Math.random() * yRange + this._activeLevel.ringMinY;
@@ -246,8 +290,11 @@ export class GameSystem extends System {
 	}
 
 	_endGame(player, global) {
+		this._currentRunScore = global.score;
+		this._latest = global.score;
 		this._currentScore.text = global.score.toString();
 		this._currentScore.sync();
+		localforage.setItem(Constants.LATEST_SCORE_KEY, this._latest);
 		if (global.score > this._record) {
 			console.log('best score updated:', global.score);
 			this._record = global.score;
@@ -255,8 +302,11 @@ export class GameSystem extends System {
 			this._recordScore.sync();
 			localforage.setItem(Constants.RECORD_SCORE_KEY, this._record);
 		}
+		this._updateScoreboardUI();
 		global.gameState = 'lobby';
 		global.score = 0;
+		this._currentRunScore = 0;
+		this._updateScoreboardUI();
 		player.space.position.y = 4;
 	}
 }
