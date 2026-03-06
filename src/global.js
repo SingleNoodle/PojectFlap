@@ -47,6 +47,8 @@ export const Constants = {
 			ringMaxY: 9,
 			// Optional per-level scene model path. If omitted, fallback to `SCENE_MODEL_PATH`.
 			sceneModelPath: 'assets/gltf/scene.gltf',
+			// Starting Y position for the first ring.
+			startingRingY: 4,
 		},
 		'level-2': {
 			name: 'Narrow Canyon',
@@ -57,6 +59,10 @@ export const Constants = {
 			ringMaxY: 10,
 			// Use a level-specific GLTF for level-2.
 			sceneModelPath: 'assets/gltf/level-2.gltf',
+			// Reverse ring positions: generate from high Y to low Y.
+			ringReversed: true,
+			// Starting Y position for the first ring (opposite side of level-1).
+			startingRingY: 9,
 		},
 	},
 
@@ -71,4 +77,5 @@ export const Constants = {
 	LATEST_SCORE_KEY: 'latest-score',
 	PLAYER_ID_KEY: 'player-id',
 	SELECTED_LEVEL_KEY: 'selected-level',
+	SESSION_HISTORY_KEY: 'session-history',
 };
