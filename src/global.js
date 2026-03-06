@@ -45,6 +45,8 @@ export const Constants = {
 			ringShrinkMultiplier: 0.98,
 			ringMinY: 4,
 			ringMaxY: 9,
+			// Optional per-level scene model path. If omitted, fallback to `SCENE_MODEL_PATH`.
+			sceneModelPath: 'assets/gltf/scene.gltf',
 		},
 		'level-2': {
 			name: 'Narrow Canyon',
@@ -53,6 +55,8 @@ export const Constants = {
 			ringShrinkMultiplier: 0.96,
 			ringMinY: 3,
 			ringMaxY: 10,
+			// Use a level-specific GLTF for level-2.
+			sceneModelPath: 'assets/gltf/level-2.gltf',
 		},
 	},
 

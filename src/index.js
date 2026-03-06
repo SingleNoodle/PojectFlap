@@ -80,13 +80,14 @@ world
 	.registerSystem(InlineSystem);
 const clock = new Clock();
 
-// Set up the main scene, camera, and renderer
-const { scene, camera, renderer, gltfLoader } = setupScene();
-
-// Create a global entity to store references to the renderer, camera, and scene
+// Determine selected level and motion profile before scene setup
 const selectedLevelId = getSelectedLevelId();
 const motionProfile = getMotionProfile();
 
+// Set up the main scene, camera, and renderer (pass selected level for per-level models)
+const { scene, camera, renderer, gltfLoader } = setupScene(selectedLevelId);
+
+// Create a global entity to store references to the renderer, camera, and scene
 world.createEntity().addComponent(GlobalComponent, {
 	renderer,
 	camera,

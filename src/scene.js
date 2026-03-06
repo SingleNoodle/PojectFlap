@@ -34,7 +34,7 @@ const KTX2_LOADER = new KTX2Loader(LOADING_MANAGER).setTranscoderPath(
  * Sets up the main scene, camera, and renderer for the game.
  * @returns {Object} An object containing the scene, camera, and renderer.
  */
-export const setupScene = () => {
+export const setupScene = (selectedLevelId) => {
 	const scene = new Scene();
 
 	// Set up the main camera
@@ -82,13 +82,18 @@ export const setupScene = () => {
 		},
 	);
 
+	// Determine scene model path (per-level override or fallback)
+	const modelPath =
+		(selectedLevelId && Constants.LEVELS[selectedLevelId] && Constants.LEVELS[selectedLevelId].sceneModelPath) ||
+		Constants.SCENE_MODEL_PATH;
+
 	// Load and add the main game model to the scene
 	const gltfLoader = new GLTFLoader(LOADING_MANAGER)
 		.setCrossOrigin('anonymous')
 		.setDRACOLoader(DRACO_LOADER)
 		.setKTX2Loader(KTX2_LOADER.detectSupport(renderer));
 	gltfLoader.load(
-		Constants.SCENE_MODEL_PATH,
+		modelPath,
 		(gltf) => {
 			scene.add(gltf.scene);
 		},
