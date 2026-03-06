@@ -221,7 +221,7 @@ export class GameSystem extends System {
 		const rotator = player.space.parent;
 		this._scoreBoard.visible = false;
 
-		// Create and position level indicator if not yet added
+		// Create and position level indicator
 		if (!this._levelIndicator) {
 			this._levelIndicator = createText(`Level: ${this._activeLevel.name}`, 0.08);
 			// Attach to camera so it always stays at the top-center of where the player is looking.
@@ -229,7 +229,7 @@ export class GameSystem extends System {
 			this._levelIndicator.position.set(0, 0.35, -1.4);
 		}
 		
-		// Create debug display if not yet added
+		// Create debug display
 		if (!this._debugDisplay) {
 			this._debugDisplay = createText('Score: 0', 0.06);
 			global.camera.add(this._debugDisplay);
