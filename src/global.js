@@ -45,7 +45,8 @@ export const Constants = {
 			ringShrinkMultiplier: 0.98,
 			ringMinY: 4,
 			ringMaxY: 9,
-			// Optional per-level scene model path. If omitted, fallback to `SCENE_MODEL_PATH`.
+			// Optional per-level scene model path 
+			// fallback to `SCENE_MODEL_PATH`.
 			sceneModelPath: 'assets/gltf/scene.gltf',
 			// Starting Y position for the first ring.
 			startingRingY: 4,
