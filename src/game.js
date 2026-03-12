@@ -345,7 +345,7 @@ export class GameSystem extends System {
 				if (
 					Math.abs(player.space.position.y - this._ring.position.y) < ringRadius
 				) {
-					this._updateScore(global, rotator, motionProfile);
+					this._updateScore(player, global, rotator, motionProfile);
 				} else {
 					this._endGame(player, global);
 				}
@@ -353,7 +353,7 @@ export class GameSystem extends System {
 		}
 	}
 
-	_updateScore(global, rotator, motionProfile) {
+	_updateScore(player, global, rotator, motionProfile) {
 		global.score += 1;
 		this._currentRunScore = global.score;
 		this._updateScoreboardUI();
@@ -381,12 +381,9 @@ export class GameSystem extends System {
 			currentLevelId === 'level-1'
 		) {
 			this._isLevelTransitioning = true;
-			console.log('Level complete! Advancing to level-2...');
-			localStorage.setItem(Constants.SELECTED_LEVEL_KEY, 'level-2');
-
-			// Simple reload - localStorage will auto-load level-2
-			console.log('Reloading to level-2...');
-			window.location.reload();
+			console.log('Level complete! Advancing to level-2 in the same map...');
+			this._transitionToLevel2(player, global, rotator, motionProfile);
+			this._isLevelTransitioning = false;
 			return;
 		}
 		
@@ -406,6 +403,29 @@ export class GameSystem extends System {
 		
 		this._ring.scale.multiplyScalar(this._activeLevel.ringShrinkMultiplier);
 		this._ringTimer = this._activeLevel.ringInterval;
+	}
+
+	_transitionToLevel2(player, global, rotator, motionProfile) {
+		const nextLevelId = 'level-2';
+		const nextLevel = Constants.LEVELS[nextLevelId];
+
+		global.levelId = nextLevelId;
+		global.level = nextLevel;
+		this._activeLevel = nextLevel;
+
+		// Teleport to a different area in the same map.
+		const level2StartY =
+			nextLevel.startingRingY !== undefined ? nextLevel.startingRingY : 7;
+		player.space.position.set(16, level2StartY, -22);
+
+		// Reposition ring system near the new spawn.
+		this._ringRotator.quaternion.copy(rotator.quaternion);
+		this._ringRotator.rotateY(motionProfile.angularSpeed * nextLevel.ringInterval);
+		this._ring.position.set(16, level2StartY, -22);
+		this._ring.scale.setScalar(nextLevel.startingRingScale);
+		this._ringTimer = nextLevel.ringInterval;
+		this._ringNumber.text = (global.score + 1).toString();
+		this._ringNumber.sync();
 	}
 
 	_endGame(player, global) {

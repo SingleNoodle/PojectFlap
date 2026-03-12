@@ -58,8 +58,8 @@ export const Constants = {
 			ringShrinkMultiplier: 0.96,
 			ringMinY: 3,
 			ringMaxY: 10,
-			// Use a level-specific GLTF for level-2.
-			sceneModelPath: 'assets/gltf/level-2.gltf',
+			// Keep level-2 in the same map; gameplay changes happen in-place.
+			sceneModelPath: 'assets/gltf/scene.gltf',
 			// Reverse ring positions: generate from high Y to low Y.
 			ringReversed: true,
 			// Starting Y position for the first ring (opposite side of level-1).
