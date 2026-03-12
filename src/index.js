@@ -100,13 +100,25 @@ world.createEntity().addComponent(GlobalComponent, {
 	motionProfile,
 });
 
-// Set the animation loop for rendering and game logic
-renderer.setAnimationLoop(function () {
-	const delta = clock.getDelta();
-	const time = clock.elapsedTime;
-	// Execute the ECS world logic
-	world.update(delta, time);
+// Set the animation loop for rendering and game logic at 120 fps
+const targetFPS = 120;
+const targetFrameTime = 1000 / targetFPS; // ~8.33ms per frame
+let lastFrameTime = performance.now();
 
-	// Render the scene
-	renderer.render(scene, camera);
+renderer.setAnimationLoop(function () {
+	const currentTime = performance.now();
+	const elapsed = currentTime - lastFrameTime;
+
+	// Only render if enough time has passed for 120 fps
+	if (elapsed >= targetFrameTime) {
+		lastFrameTime = currentTime - (elapsed % targetFrameTime);
+
+		const delta = clock.getDelta();
+		const time = clock.elapsedTime;
+		// Execute the ECS world logic
+		world.update(delta, time);
+
+		// Render the scene
+		renderer.render(scene, camera);
+	}
 });
