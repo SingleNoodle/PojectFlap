@@ -418,6 +418,9 @@ export class GameSystem extends System {
 			nextLevel.startingRingY !== undefined ? nextLevel.startingRingY : 7;
 		player.space.position.set(16, level2StartY, -22);
 
+		// Rotate player to face the correct direction on the opposite side
+		rotator.rotateY(Math.PI);
+
 		// Reposition ring system near the new spawn.
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(motionProfile.angularSpeed * nextLevel.ringInterval);
