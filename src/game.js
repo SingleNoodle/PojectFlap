@@ -13,6 +13,8 @@ import {
 	PlaneGeometry,
 	SRGBColorSpace,
 	TextureLoader,
+	Vector3,
+	Quaternion,
 } from 'three';
 
 import { PlayerComponent } from './player';
@@ -54,22 +56,20 @@ export class GameSystem extends System {
 		this._highestScoreElement = null;
 		this._latestScoreElement = null;
 		this._currentScoreElement = null;
-		this._sessionHistory = []; // Last 3 sessions
 
 		this._currentScore = createText(0);
 		this._recordScore = createText(2);
-		this._worldRecord = createText(0);
-		this._ranking = createText(0);
-		this._levelName = createText(this._activeLevel.name, 0.09);
 		
-		// Create text elements for last 3 sessions
-		this._sessionTexts = [
-			createText(''), // Session 1
-			createText(''), // Session 2
-			createText(''), // Session 3
-		];
+		//this._isLevelTransitioning = false;
+
+		this._transitionGraceTimer =1.0;
+		//Timer to help orientate players after level transition by temporarily pausing ring movement and score updates.
 		
-		this._isLevelTransitioning = false;
+		this._levelTransition = null; 
+		// Will hold data for smooth level transitions when implemented
+		this._tmpVec3 = new Vector3();
+		this._tmpQuat = new Quaternion();
+	
 	}
 
 	_cacheScoreboardElements() {
@@ -77,6 +77,20 @@ export class GameSystem extends System {
 		this._latestScoreElement = document.getElementById('latest-score-value');
 		this._currentScoreElement = document.getElementById('current-score-value');
 		this._updateScoreboardUI();
+	}
+
+	_updateScoreboardUI() {
+		if (this._highestScoreElement) {
+			this._highestScoreElement.textContent = this._record.toString();
+		}
+
+		if (this._latestScoreElement) {
+			this._latestScoreElement.textContent = this._latest.toString();
+		}
+
+		if (this._currentScoreElement) {
+			this._currentScoreElement.textContent = this._currentRunScore.toString();
+		}
 	}
 
 	_loadStoredData() {
@@ -107,39 +121,6 @@ export class GameSystem extends System {
 			}
 		});
 
-		localforage.getItem(Constants.SESSION_HISTORY_KEY).then((history) => {
-			if (Array.isArray(history)) {
-				this._sessionHistory = history;
-				this._updateSessionDisplay();
-			}
-		});
-	}
-
-	_updateSessionDisplay() {
-		// Display last 3 sessions (most recent first)
-		for (let i = 0; i < 3; i++) {
-			if (i < this._sessionHistory.length) {
-				const session = this._sessionHistory[i];
-				this._sessionTexts[i].text = `${session.score} - ${session.level}`;
-			} else {
-				this._sessionTexts[i].text = '--';
-			}
-			this._sessionTexts[i].sync();
-		}
-	}
-
-	_updateScoreboardUI() {
-		if (this._highestScoreElement) {
-			this._highestScoreElement.textContent = this._record.toString();
-		}
-
-		if (this._latestScoreElement) {
-			this._latestScoreElement.textContent = this._latest.toString();
-		}
-
-		if (this._currentScoreElement) {
-			this._currentScoreElement.textContent = this._currentRunScore.toString();
-		}
 	}
 
 	update(delta) {
@@ -157,37 +138,18 @@ export class GameSystem extends System {
 
 	_setupScoreBoard(player) {
 		if (!this._scoreBoard) {
-			// Match scoreboard image aspect ratio (1080x1920 = 0.5625)
-			// Using 2 units wide and 3.56 units tall to maintain aspect ratio
+			// Match scoreboard image aspect ratio (1200x600 = 2.0)
+			// Using 2 units wide and 1 unit tall to maintain aspect ratio
 			this._scoreBoard = new Mesh(
-				new PlaneGeometry(2, 3.56),
+				new PlaneGeometry(2, 1),
 				new MeshBasicMaterial({ map: SCORE_BOARD_TEXTURE, transparent: true }),
 			);
 			player.space.add(this._scoreBoard);
 			this._scoreBoard.position.set(0, 1.5, -2);
 
-			// Position values to match new scoreboard layout
-			// Left column: Current Score, Ranking, Level
-			this._addTextToScoreBoard(this._currentScore, -0.3, 1.2, 0.07);
-			this._addTextToScoreBoard(this._ranking, -0.3, 0.65, 0.07);
-			this._addTextToScoreBoard(this._levelName, -0.3, 0.1, 0.06);
-			
-			// Right column: Record, World Record
-			this._addTextToScoreBoard(this._recordScore, 0.5, 1.2, 0.07);
-			this._addTextToScoreBoard(this._worldRecord, 0.5, 0.65, 0.07);
-			
-			// Session history rows (Last 3 sessions displayed below)
-			const sessionX = -0.3;
-			const sessionStartY = -0.5;
-			const sessionRowHeight = 0.5;
-			for (let i = 0; i < 3; i++) {
-				this._addTextToScoreBoard(
-					this._sessionTexts[i],
-					sessionX,
-					sessionStartY - i * sessionRowHeight,
-					0.065
-				);
-			}
+			// Keep in-world board simple: current and record only.
+			this._addTextToScoreBoard(this._currentScore, -0.4, 0.2, 0.08);
+			this._addTextToScoreBoard(this._recordScore, 0.4, 0.2, 0.08);
 		}
 	}
 
@@ -201,34 +163,24 @@ export class GameSystem extends System {
 	_manageGameStates(global, player, delta) {
 		this._activeLevel =
 			global.level || Constants.LEVELS[Constants.DEFAULT_LEVEL_ID];
+
 		const motionProfile =
 			global.motionProfile || Constants.MOTION_PROFILES.default;
 
-		if (this._levelName && this._levelName.text !== this._activeLevel.name) {
-			this._levelName.text = this._activeLevel.name;
-			this._levelName.sync();
-		}
-
-		if (
-			this._levelIndicator &&
-			this._levelIndicator.text !== `Level: ${this._activeLevel.name}`
-		) {
-			this._levelIndicator.text = `Level: ${this._activeLevel.name}`;
-			this._levelIndicator.sync();
-		}
-
 		const isPresenting = global.renderer.xr.isPresenting;
 		const rotator = player.space.parent;
+
 		this._scoreBoard.visible = false;
 
 		// Create and position level indicator
 		if (!this._levelIndicator) {
-			this._levelIndicator = createText(`Level: ${this._activeLevel.name}`, 0.08);
-			// Attach to camera so it always stays at the top-center of where the player is looking.
+			this._levelIndicator = createText('Level: level-1 | Score: 0', 0.08);
 			global.camera.add(this._levelIndicator);
 			this._levelIndicator.position.set(0, 0.35, -1.4);
 		}
-		
+
+		this._updateGameplayHud(global);
+
 		// Create debug display
 		if (!this._debugDisplay) {
 			this._debugDisplay = createText('Score: 0', 0.06);
@@ -236,8 +188,19 @@ export class GameSystem extends System {
 			this._debugDisplay.position.set(0, 0.25, -1.4);
 		}
 
+		// Initialize ring once
 		if (!this._ring && global.scene.getObjectByName('ring')) {
 			this._initializeRing(player, global, rotator, motionProfile);
+		}
+
+		// If transition is active, update it and stop here
+		if (!this._ring && global.scene.getObjectByName('ring')) {
+			this._initializeRing(player, global, rotator, motionProfile);
+		}
+
+		if (this._levelTransition) {
+			this._updateLevelTransition(player, global, rotator, delta, motionProfile);
+			return;
 		}
 
 		if (global.gameState === 'lobby') {
@@ -252,10 +215,15 @@ export class GameSystem extends System {
 		this._ringRotator = new Group();
 		this._ringRotator.add(this._ring);
 		this._ring.position.set(0, 4, 34);
+		//for changing the speed and direction of ring rotation based on level settings and motion profile
+		const effectiveAngularSpeed =
+			motionProfile.angularSpeed * this._getAngularDirection();
+
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			motionProfile.angularSpeed * this._activeLevel.ringInterval,
+			effectiveAngularSpeed * this._activeLevel.ringInterval,
 		);
+		
 		this._ring.position.y = player.space.position.y;
 		this._ring.scale.setScalar(this._activeLevel.startingRingScale);
 
@@ -315,14 +283,19 @@ export class GameSystem extends System {
 		global.gameState = 'ingame';
 		this._currentRunScore = 0;
 		this._updateScoreboardUI();
+		this._currentScore.text = '0';
+		this._currentScore.sync();
 		this._ringTimer;
 		this._flapData = {
 			left: { y: null, distance: 0, flaps: 0 },
 			right: { y: null, distance: 0, flaps: 0 },
 		};
+		const effectiveAngularSpeed =
+			motionProfile.angularSpeed * this._getAngularDirection();
+
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			motionProfile.angularSpeed * this._activeLevel.ringInterval,
+			effectiveAngularSpeed * this._activeLevel.ringInterval,
 		);
 		// Use level-specific starting Y if provided, otherwise default to 4.
 		const startingY = this._activeLevel.startingRingY !== undefined ? this._activeLevel.startingRingY : 4;
@@ -331,12 +304,19 @@ export class GameSystem extends System {
 		this._ringTimer = this._activeLevel.ringInterval;
 		this._ringNumber.text = '1';
 		this._ringNumber.sync();
+		this._updateGameplayHud(global);
 	}
 
 	_handleInGameState(player, global, rotator, delta, motionProfile) {
 		if (global.gameState !== 'ingame') {
 			return;
 		}
+
+		if(this._transitionGraceTimer > 0) {
+			this._transitionGraceTimer -= delta;
+			return; 
+		}
+		// Skip updating rings and score during grace period after level transition
 
 		if (this._ring) {
 			this._ringTimer -= delta;
@@ -357,8 +337,11 @@ export class GameSystem extends System {
 		global.score += 1;
 		this._currentRunScore = global.score;
 		this._updateScoreboardUI();
+		this._currentScore.text = global.score.toString();
+		this._currentScore.sync();
 		this._ringNumber.text = (global.score + 1).toString();
 		this._ringNumber.sync();
+		this._updateGameplayHud(global);
 		
 		// DEBUG: Log score and level info
 		console.log(`Score: ${global.score}, Level: ${global.levelId}, Transitioning: ${this._isLevelTransitioning}`);
@@ -375,21 +358,24 @@ export class GameSystem extends System {
 			key => Constants.LEVELS[key] === this._activeLevel
 		);
 		
+		
 		if (
-			!this._isLevelTransitioning &&
+			!this._levelTransition &&
 			global.score >= 5 &&
 			currentLevelId === 'level-1'
 		) {
-			this._isLevelTransitioning = true;
-			console.log('Level complete! Advancing to level-2 in the same map...');
-			this._transitionToLevel2(player, global, rotator, motionProfile);
-			this._isLevelTransitioning = false;
+			console.log('Level complete! Transitioning to level-2...');
+			this._beginLevel2Transition(player, global);
 			return;
 		}
+
 		
+		const effectiveAngularSpeed =
+			motionProfile.angularSpeed * this._getAngularDirection();
+
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			motionProfile.angularSpeed * this._activeLevel.ringInterval,
+			effectiveAngularSpeed * this._activeLevel.ringInterval,
 		);
 		
 		// Generate ring position (reversed for level-2: high Y to low Y).
@@ -404,32 +390,50 @@ export class GameSystem extends System {
 		this._ring.scale.multiplyScalar(this._activeLevel.ringShrinkMultiplier);
 		this._ringTimer = this._activeLevel.ringInterval;
 	}
-
+	//old transitioning method for reference, kept in case we want to revert to instant transition or need it for debugging
+	/*
 	_transitionToLevel2(player, global, rotator, motionProfile) {
-		const nextLevelId = 'level-2';
-		const nextLevel = Constants.LEVELS[nextLevelId];
+		
+	const nextLevelId = 'level-2';
+    const nextLevel = Constants.LEVELS[nextLevelId];
 
-		global.levelId = nextLevelId;
-		global.level = nextLevel;
-		this._activeLevel = nextLevel;
+    global.levelId = nextLevelId;
+    global.level = nextLevel;
+    this._activeLevel = nextLevel;
 
-		// Teleport to a different area in the same map.
-		const level2StartY =
-			nextLevel.startingRingY !== undefined ? nextLevel.startingRingY : 7;
-		player.space.position.set(16, level2StartY, -22);
+    const level2StartY =
+        nextLevel.startingRingY !== undefined ? nextLevel.startingRingY : 7;
 
-		// Rotate player to face the correct direction on the opposite side
-		rotator.rotateY(Math.PI);
+    // Teleport player to the new level area
+    const playerX = 16;
+    const playerZ = -22;
+    player.space.position.set(playerX, level2StartY, playerZ);
 
-		// Reposition ring system near the new spawn.
-		this._ringRotator.quaternion.copy(rotator.quaternion);
-		this._ringRotator.rotateY(motionProfile.angularSpeed * nextLevel.ringInterval);
-		this._ring.position.set(16, level2StartY, -22);
-		this._ring.scale.setScalar(nextLevel.startingRingScale);
-		this._ringTimer = nextLevel.ringInterval;
-		this._ringNumber.text = (global.score + 1).toString();
-		this._ringNumber.sync();
-	}
+    // Face the opposite direction
+    rotator.rotateY(Math.PI);
+
+    // NEW: short grace period so player has time to react
+    this._transitionGraceTimer = 1.25;
+
+    // Reposition ring system
+    this._ringRotator.quaternion.copy(rotator.quaternion);
+    this._ringRotator.rotateY(motionProfile.angularSpeed * nextLevel.ringInterval);
+
+    // IMPORTANT:
+    // Spawn the first ring AHEAD of the player, not at the exact same position.
+    const firstRingOffsetZ = 20; // tune this (try 20 to 30)
+	//fixes ring spawning since player is rotated
+    this._ring.position.set(playerX, level2StartY, playerZ + firstRingOffsetZ);
+
+    this._ring.scale.setScalar(nextLevel.startingRingScale);
+
+    // Give extra time before this first ring is evaluated
+    this._ringTimer = nextLevel.ringInterval + this._transitionGraceTimer;
+
+    this._ringNumber.text = (global.score + 1).toString();
+    this._ringNumber.sync();
+	}*/
+
 
 	_endGame(player, global) {
 		this._currentRunScore = global.score;
@@ -437,15 +441,6 @@ export class GameSystem extends System {
 		this._currentScore.text = global.score.toString();
 		this._currentScore.sync();
 		localforage.setItem(Constants.LATEST_SCORE_KEY, this._latest);
-		
-		// Save to session history (keep last 3)
-		const levelName = this._activeLevel.name;
-		this._sessionHistory.unshift({ score: global.score, level: levelName });
-		if (this._sessionHistory.length > 3) {
-			this._sessionHistory.pop();
-		}
-		localforage.setItem(Constants.SESSION_HISTORY_KEY, this._sessionHistory);
-		this._updateSessionDisplay();
 		
 		if (global.score > this._record) {
 			console.log('best score updated:', global.score);
@@ -459,9 +454,137 @@ export class GameSystem extends System {
 		global.score = 0;
 		this._currentRunScore = 0;
 		this._updateScoreboardUI();
+		this._currentScore.text = '0';
+		this._currentScore.sync();
+		this._updateGameplayHud(global);
 		player.space.position.y = 4;
 	}
+
+	//new transitioning method with smooth lerp and optional transition text
+	_beginLevel2Transition(player, global) {
+		const nextLevelId = 'level-2';
+		const nextLevel = Constants.LEVELS[nextLevelId];
+
+		if (this._ring) {
+			this._ring.visible = false;
+		}
+
+		if (this._levelIndicator) {
+			this._levelIndicator.text = 'Level 2';
+			this._levelIndicator.sync();
+		}
+
+		global.gameState = 'transition';
+
+		this._levelTransition = {
+			nextLevelId,
+			nextLevel,
+			elapsed: 0,
+			duration: 0.2,
+		};
+	}
+
+
+
+	_updateLevelTransition(player, global, rotator, delta, motionProfile) {
+		if (!this._levelTransition) {
+			return;
+		}
+
+		this._levelTransition.elapsed += delta;
+
+		if (this._debugDisplay) {
+			this._debugDisplay.text = `Transition...`;
+			this._debugDisplay.sync();
+		}
+
+		if (this._levelTransition.elapsed >= this._levelTransition.duration) {
+			this._finishLevel2Transition(player, global, rotator, motionProfile);
+		}
+	}
+
+	_finishLevel2Transition(player, global, rotator, motionProfile) {
+		const { nextLevelId, nextLevel } = this._levelTransition;
+
+		global.levelId = nextLevelId;
+		global.level = nextLevel;
+		this._activeLevel = nextLevel;
+
+		const level2StartY =
+			nextLevel.startingRingY !== undefined ? nextLevel.startingRingY : 7;
+
+		// Use a spawn point that is on the opposite side of the same orbit/path
+		const level2LocalX = 0;
+		const level2LocalZ = -34;
+
+		// Snap player to the level-2 local spawn point
+		player.space.position.set(level2LocalX, level2StartY, level2LocalZ);
+
+		// IMPORTANT: do NOT rotate rotator here
+		global.gameState = 'ingame';
+
+		if (this._levelIndicator) {
+			this._levelIndicator.text = `Level: ${nextLevel.name}`;
+			this._levelIndicator.sync();
+		}
+
+		// Put the ring on the same local path as the player,
+		// then rotate it ahead by one ring interval
+		const effectiveAngularSpeed =
+			motionProfile.angularSpeed * (nextLevel.angularDirection ?? 1);
+
+		this._ringRotator.quaternion.copy(rotator.quaternion);
+		this._ringRotator.rotateY(
+			effectiveAngularSpeed * nextLevel.ringInterval,
+		);
+
+		this._ring.position.set(level2LocalX, level2StartY, level2LocalZ);
+		this._ring.scale.setScalar(nextLevel.startingRingScale);
+		this._ring.visible = true;
+
+		// Give the player time to react after teleport
+		this._transitionGraceTimer = 1.0;
+		this._ringTimer = nextLevel.ringInterval;
+
+		this._ringNumber.text = (global.score + 1).toString();
+		this._ringNumber.sync();
+
+		this._levelTransition = null;
+
+		if (this._debugDisplay) {
+			this._debugDisplay.text = `Score: ${global.score} | Level: ${global.levelId} | Active: ${this._activeLevel.name}`;
+			this._debugDisplay.sync();
+		}
+	}
+
+	_updateGameplayHud(global) {
+		if (!this._levelIndicator) {
+			return;
+		}
+
+		this._levelIndicator.text = `Level: ${this._activeLevel.name} | Score: ${global.score}`;
+		this._levelIndicator.sync();
+	}
+
+	_setPlayerSpaceFromHeadWorld(player, rotator, desiredHeadWorldPos) {
+		// Head position is local to player.space
+		const headLocalPos = player.head.position.clone();
+
+		// Convert desired world position into rotator local space
+		const desiredHeadLocalToRotator = rotator.worldToLocal(desiredHeadWorldPos.clone());
+
+		// Move player.space so that head ends up at desiredHeadWorldPos
+		player.space.position.copy(desiredHeadLocalToRotator.sub(headLocalPos));
+	}
+
+	_getAngularDirection() {
+		return this._activeLevel?.angularDirection ?? 1;
+	}
+
 }
+
+
+
 
 GameSystem.queries = {
 	global: { required: [GlobalComponent] },
