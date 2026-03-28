@@ -69,7 +69,33 @@ export class GameSystem extends System {
 			createText(''), // Session 3
 		];
 		
+<<<<<<< Updated upstream
 		this._isLevelTransitioning = false;
+=======
+		this._levelTransition = null; 
+		// Will hold data for smooth level transitions when implemented
+		this._tmpVec3 = new Vector3();
+		this._tmpQuat = new Quaternion();
+		this._pointAudio = null;
+		this._initializeAudio();
+	
+>>>>>>> Stashed changes
+	}
+
+	_initializeAudio() {
+		this._pointAudio = new Audio(Constants.SCORE_CUE_AUDIO_PATH);
+		this._pointAudio.preload = 'auto';
+	}
+
+	_playPointAudio() {
+		if (!this._pointAudio) {
+			return;
+		}
+
+		this._pointAudio.currentTime = 0;
+		this._pointAudio.play().catch(() => {
+			// Ignore play interruptions from browser autoplay policies.
+		});
 	}
 
 	_cacheScoreboardElements() {
@@ -355,6 +381,7 @@ export class GameSystem extends System {
 
 	_updateScore(player, global, rotator, motionProfile) {
 		global.score += 1;
+		this._playPointAudio();
 		this._currentRunScore = global.score;
 		this._updateScoreboardUI();
 		this._ringNumber.text = (global.score + 1).toString();

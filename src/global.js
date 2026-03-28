@@ -72,6 +72,8 @@ export const Constants = {
 	ENV_TEXTURE_PATH: 'assets/envmap.exr',
 	SCENE_MODEL_PATH: 'assets/gltf/scene.gltf',
 	WING_MODEL_PATH: 'assets/gltf/wing.gltf',
+	SCORE_CUE_AUDIO_PATH:
+		'audio/u_vdwj1c20kz-coin-collision-sound-342335.mp3',
 
 	// local storage keys
 	RECORD_SCORE_KEY: 'record-score',
