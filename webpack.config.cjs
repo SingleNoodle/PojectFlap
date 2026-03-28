@@ -46,6 +46,7 @@ module.exports = {
 		new CopyPlugin({
 			patterns: [
 				{ from: 'src/assets', to: 'assets' },
+				{ from: 'audio', to: 'audio' },
 				{
 					from: 'node_modules/three/examples/jsm/libs/basis',
 					to: 'vendor/basis',
