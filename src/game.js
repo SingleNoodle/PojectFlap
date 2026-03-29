@@ -68,23 +68,20 @@ export class GameSystem extends System {
 			createText(''), // Session 2
 			createText(''), // Session 3
 		];
-		
-<<<<<<< Updated upstream
+
 		this._isLevelTransitioning = false;
-=======
-		this._levelTransition = null; 
-		// Will hold data for smooth level transitions when implemented
-		this._tmpVec3 = new Vector3();
-		this._tmpQuat = new Quaternion();
 		this._pointAudio = null;
+		this._gameOverAudio = null;
 		this._initializeAudio();
-	
->>>>>>> Stashed changes
 	}
 
 	_initializeAudio() {
 		this._pointAudio = new Audio(Constants.SCORE_CUE_AUDIO_PATH);
 		this._pointAudio.preload = 'auto';
+		this._pointAudio.volume = Constants.SCORE_CUE_AUDIO_VOLUME;
+		this._gameOverAudio = new Audio(Constants.GAME_OVER_AUDIO_PATH);
+		this._gameOverAudio.preload = 'auto';
+		this._gameOverAudio.volume = Constants.GAME_OVER_AUDIO_VOLUME;
 	}
 
 	_playPointAudio() {
@@ -94,6 +91,17 @@ export class GameSystem extends System {
 
 		this._pointAudio.currentTime = 0;
 		this._pointAudio.play().catch(() => {
+			// Ignore play interruptions from browser autoplay policies.
+		});
+	}
+
+	_playGameOverAudio() {
+		if (!this._gameOverAudio) {
+			return;
+		}
+
+		this._gameOverAudio.currentTime = 0;
+		this._gameOverAudio.play().catch(() => {
 			// Ignore play interruptions from browser autoplay policies.
 		});
 	}
@@ -456,6 +464,7 @@ export class GameSystem extends System {
 	}
 
 	_endGame(player, global) {
+		this._playGameOverAudio();
 		this._currentRunScore = global.score;
 		this._latest = global.score;
 		this._currentScore.text = global.score.toString();
