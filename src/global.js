@@ -74,6 +74,9 @@ export const Constants = {
 	WING_MODEL_PATH: 'assets/gltf/wing.gltf',
 	SCORE_CUE_AUDIO_PATH:
 		'audio/u_vdwj1c20kz-coin-collision-sound-342335.mp3',
+	SCORE_CUE_AUDIO_VOLUME: 0.35,
+	GAME_OVER_AUDIO_PATH: 'audio/game over.mp3',
+	GAME_OVER_AUDIO_VOLUME: 0.5,
 
 	// local storage keys
 	RECORD_SCORE_KEY: 'record-score',
