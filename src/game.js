@@ -14,6 +14,7 @@ import {
 	SRGBColorSpace,
 	TextureLoader,
 } from 'three';
+import { createNeonRing, createProceduralCave } from './proceduralMap';
 
 import { PlayerComponent } from './player';
 import { System } from 'elics';
@@ -421,6 +422,18 @@ export class GameSystem extends System {
 			this._isLevelTransitioning = false;
 			return;
 		}
+
+		if (
+			!this._isLevelTransitioning &&
+			global.score >= 10 &&
+			currentLevelId === 'level-2'
+		) {
+			this._isLevelTransitioning = true;
+			console.log('Level complete! Advancing to level-3: Neon Cavern...');
+			this._transitionToLevel3(player, global, rotator, motionProfile);
+			this._isLevelTransitioning = false;
+			return;
+		}
 		
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
@@ -457,6 +470,41 @@ export class GameSystem extends System {
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(motionProfile.angularSpeed * nextLevel.ringInterval);
 		this._ring.position.set(16, level2StartY, -22);
+		this._ring.scale.setScalar(nextLevel.startingRingScale);
+		this._ringTimer = nextLevel.ringInterval;
+		this._ringNumber.text = (global.score + 1).toString();
+		this._ringNumber.sync();
+	}
+
+	_transitionToLevel3(player, global, rotator, motionProfile) {
+		const nextLevelId = 'level-3';
+		const nextLevel = Constants.LEVELS[nextLevelId];
+
+		global.levelId = nextLevelId;
+		global.level = nextLevel;
+		this._activeLevel = nextLevel;
+
+		// Swap out the GLTF scene for the procedural cave.
+		const gltfScene = global.scene.getObjectByName('gltfScene');
+		if (gltfScene) global.scene.remove(gltfScene);
+		global.scene.add(createProceduralCave(global.scene));
+
+		// Replace the old ring mesh with a neon TorusGeometry ring.
+		const newRing = createNeonRing();
+		if (this._ringNumber) this._ring.remove(this._ringNumber);
+		this._ringRotator.remove(this._ring);
+		this._ringRotator.add(newRing);
+		this._ring = newRing;
+		if (this._ringNumber) {
+			this._ring.add(this._ringNumber);
+		}
+
+		const startY = nextLevel.startingRingY !== undefined ? nextLevel.startingRingY : 5;
+		player.space.position.set(0, startY, 0);
+
+		this._ringRotator.quaternion.copy(rotator.quaternion);
+		this._ringRotator.rotateY(motionProfile.angularSpeed * nextLevel.ringInterval);
+		this._ring.position.set(0, startY, 34);
 		this._ring.scale.setScalar(nextLevel.startingRingScale);
 		this._ringTimer = nextLevel.ringInterval;
 		this._ringNumber.text = (global.score + 1).toString();

@@ -17,6 +17,7 @@ import {
 } from 'three';
 
 import { Constants } from './global';
+import { createNeonRing, createProceduralCave } from './proceduralMap';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
 import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
@@ -82,26 +83,34 @@ export const setupScene = (selectedLevelId) => {
 		},
 	);
 
-	// Determine scene model path (per-level override or fallback)
-	const modelPath =
-		(selectedLevelId && Constants.LEVELS[selectedLevelId] && Constants.LEVELS[selectedLevelId].sceneModelPath) ||
-		Constants.SCENE_MODEL_PATH;
-
-	// Load and add the main game model to the scene
+	// Build the GLTF loader (always needed for the wing model even on procedural levels)
 	const gltfLoader = new GLTFLoader(LOADING_MANAGER)
 		.setCrossOrigin('anonymous')
 		.setDRACOLoader(DRACO_LOADER)
 		.setKTX2Loader(KTX2_LOADER.detectSupport(renderer));
-	gltfLoader.load(
-		modelPath,
-		(gltf) => {
-			scene.add(gltf.scene);
-		},
-		undefined,
-		(error) => {
-			console.error('Error loading scene model:', error);
-		},
-	);
+
+	const levelConfig = selectedLevelId && Constants.LEVELS[selectedLevelId];
+
+	if (levelConfig && levelConfig.proceduralScene) {
+		// Procedural level: build the cave in JS and add a neon ring to the scene.
+		const cave = createProceduralCave(scene);
+		scene.add(cave);
+		scene.add(createNeonRing());
+	} else {
+		// GLTF level: load the scene model and tag it so it can be removed on level transition.
+		const modelPath = (levelConfig && levelConfig.sceneModelPath) || Constants.SCENE_MODEL_PATH;
+		gltfLoader.load(
+			modelPath,
+			(gltf) => {
+				gltf.scene.name = 'gltfScene';
+				scene.add(gltf.scene);
+			},
+			undefined,
+			(error) => {
+				console.error('Error loading scene model:', error);
+			},
+		);
+	}
 
 	// Adjust camera and renderer settings on window resize
 	window.addEventListener('resize', function () {

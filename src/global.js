@@ -65,6 +65,17 @@ export const Constants = {
 			// Starting Y position for the first ring (opposite side of level-1).
 			startingRingY: 9,
 		},
+		'level-3': {
+			name: 'Neon Cavern',
+			ringInterval: 1.75,
+			startingRingScale: 3.5,
+			ringShrinkMultiplier: 0.94,
+			ringMinY: 1,
+			ringMaxY: 8,
+			startingRingY: 5,
+			// Signals that this level uses procedural geometry instead of a GLTF file.
+			proceduralScene: true,
+		},
 	},
 
 	// asset paths
