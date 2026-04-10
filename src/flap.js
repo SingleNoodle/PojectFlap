@@ -59,7 +59,10 @@ export class FlapSystem extends System {
 			this._init(player.space, global.scene, global.gltfLoader);
 		}
 
-		this._rotator.rotateY(motionProfile.angularSpeed * delta);
+		const angularDirection = global.level?.angularDirection ?? 1;
+		const effectiveAngularSpeed = motionProfile.angularSpeed * angularDirection;
+
+		this._rotator.rotateY(effectiveAngularSpeed * delta);
 		const isPresenting = global.renderer.xr.isPresenting;
 
 		if (isPresenting) {
@@ -72,16 +75,25 @@ export class FlapSystem extends System {
 	}
 
 	_handleVRMode(player, global, delta, motionProfile) {
-		let flapSpeed = 0;
+		let leftFlap = 0;
+		let rightFlap = 0;
 		let wingAngle = 0;
 
 		Object.entries(player.controllers).forEach(([handedness, controller]) => {
 			const thisFrameY = controller.targetRaySpace.position.y;
-			if (this._lastFrameY[handedness]) {
+
+			if (this._lastFrameY[handedness] != null) {
 				if (thisFrameY < this._lastFrameY[handedness]) {
-					flapSpeed += (this._lastFrameY[handedness] - thisFrameY) / delta;
+					const flapAmount = (this._lastFrameY[handedness] - thisFrameY) / delta;
+
+					if (handedness === 'left') {
+						leftFlap = flapAmount;
+					} else if (handedness === 'right') {
+						rightFlap = flapAmount;
+					}
 				}
 			}
+
 			this._lastFrameY[handedness] = thisFrameY;
 
 			if (this._wings[handedness]) {
@@ -89,6 +101,15 @@ export class FlapSystem extends System {
 				wingAngle += this._calculateWingAngle(handedness, controller);
 			}
 		});
+
+// Reduce lift when both wings flap together
+const bothFlapping = leftFlap > 0 && rightFlap > 0;
+
+//diminishing returns formula for flapping both wings together, so that it's more efficient to flap one wing at a time
+const flapSpeed = bothFlapping
+    ? Math.max(leftFlap, rightFlap) + Math.min(leftFlap, rightFlap) * 0.45
+    : leftFlap + rightFlap;
+
 
 		let gravityAdjusted = this._adjustGravityBasedOnWingAngle(
 			wingAngle,
