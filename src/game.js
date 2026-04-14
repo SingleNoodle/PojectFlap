@@ -92,9 +92,11 @@ export class GameSystem extends System {
 		];
 
 		this._isLevelTransitioning = false;
-		this._pointAudio = null;
-		this._gameOverAudio = null;
-		this._initializeAudio();
+        this._isRestarting = false;
+        this._pointAudio = null;
+        this._gameOverAudio = null;
+        this._initializeAudio();
+
 	}
 
 	_initializeAudio() {
@@ -129,25 +131,38 @@ export class GameSystem extends System {
 	}
 
 	_cacheScoreboardElements() {
-		this._highestScoreElement = document.getElementById('highest-score-value');
-		this._latestScoreElement = document.getElementById('latest-score-value');
-		this._currentScoreElement = document.getElementById('current-score-value');
-		this._updateScoreboardUI();
-	}
+        this._highestScoreElement = document.getElementById('highest-score-value');
+        this._latestScoreElement = document.getElementById('latest-score-value');
+        this._currentScoreElement = document.getElementById('current-score-value');
+
+        // Re-show the browser scoreboard fields near the Enter VR button area
+        if (this._highestScoreElement && this._highestScoreElement.parentElement) {
+            this._highestScoreElement.parentElement.style.display = '';
+        }
+        if (this._latestScoreElement && this._latestScoreElement.parentElement) {
+            this._latestScoreElement.parentElement.style.display = '';
+        }
+        if (this._currentScoreElement && this._currentScoreElement.parentElement) {
+            this._currentScoreElement.parentElement.style.display = '';
+        }
+
+        this._updateScoreboardUI();
+    }
 
 	_updateScoreboardUI() {
-		if (this._highestScoreElement) {
-			this._highestScoreElement.textContent = this._record.toString();
-		}
+        if (this._highestScoreElement) {
+            this._highestScoreElement.textContent = this._record.toString();
+        }
 
-		if (this._latestScoreElement) {
-			this._latestScoreElement.textContent = this._latest.toString();
-		}
+        if (this._latestScoreElement) {
+            this._latestScoreElement.textContent = this._latest.toString();
+        }
 
-		if (this._currentScoreElement) {
-			this._currentScoreElement.textContent = this._currentRunScore.toString();
-		}
-	}
+        if (this._currentScoreElement) {
+            this._currentScoreElement.textContent = this._currentRunScore.toString();
+        }
+    }
+
 
 	_loadStoredData() {
 		localforage.getItem(Constants.RECORD_SCORE_KEY).then((score) => {
@@ -191,21 +206,27 @@ export class GameSystem extends System {
 	}
 
 	_setupScoreBoard(player) {
-		if (!this._scoreBoard) {
-			// Match scoreboard image aspect ratio (1200x600 = 2.0)
-			// Using 2 units wide and 1 unit tall to maintain aspect ratio
-			this._scoreBoard = new Mesh(
-				new PlaneGeometry(2, 1),
-				new MeshBasicMaterial({ map: SCORE_BOARD_TEXTURE, transparent: true }),
-			);
-			player.space.add(this._scoreBoard);
-			this._scoreBoard.position.set(0, 1.5, -2);
+        if (!this._scoreBoard) {
+            // Restore the original in-world scoreboard PNG setup.
+            this._scoreBoard = new Mesh(
+                new PlaneGeometry(2, 1),
+                new MeshBasicMaterial({ map: SCORE_BOARD_TEXTURE, transparent: true }),
+            );
+            player.space.add(this._scoreBoard);
+            this._scoreBoard.position.set(0, 1.5, -2);
 
-			// Keep in-world board simple: current and record only.
-			this._addTextToScoreBoard(this._currentScore, -0.4, 0.2, 0.08);
-			this._addTextToScoreBoard(this._recordScore, 0.4, 0.2, 0.08);
-		}
-	}
+            // Original repo-style board values:
+            // current score on the left, record score on the right.
+            this._addTextToScoreBoard(this._currentScore, -0.4, 0.2, 0.08);
+            this._addTextToScoreBoard(this._recordScore, 0.4, 0.2, 0.08);
+
+            // If you ever want only one value again, keep these older options commented:
+            // this._addTextToScoreBoard(this._currentScore, 0, 0.18, 0.12);
+            // this._addTextToScoreBoard(this._recordScore, 0.4, 0.2, 0.08);
+        }
+    }
+
+
 
 	_addTextToScoreBoard(text, x, y, fontSize = 0.08) {
 		this._scoreBoard.add(text);
@@ -215,52 +236,58 @@ export class GameSystem extends System {
 	}
 
 	_manageGameStates(global, player, delta) {
-		this._activeLevel =
-			global.level || Constants.LEVELS[Constants.DEFAULT_LEVEL_ID];
+        this._activeLevel =
+            global.level || Constants.LEVELS[Constants.DEFAULT_LEVEL_ID];
 
-		const motionProfile =
-			global.motionProfile || Constants.MOTION_PROFILES.default;
+        const motionProfile =
+            global.motionProfile || Constants.MOTION_PROFILES.default;
 
-		const isPresenting = global.renderer.xr.isPresenting;
-		const rotator = player.space.parent;
+        const isPresenting = global.renderer.xr.isPresenting;
+        const rotator = player.space.parent;
 
-		this._scoreBoard.visible = false;
+        this._scoreBoard.visible = false;
 
-		// Create and position level indicator
-		if (!this._levelIndicator) {
-			this._levelIndicator = createText('Level: level-1 | Score: 0', 0.08);
-			global.camera.add(this._levelIndicator);
-			this._levelIndicator.position.set(0, 0.35, -1.4);
-		}
+        // Create and position score HUD (bottom-left in view)
+        if (!this._levelIndicator) {
+            this._levelIndicator = createText('Score: 0', 0.08);
+            global.camera.add(this._levelIndicator);
 
-		this._updateGameplayHud(global);
+            // Bottom-left placement
+            this._levelIndicator.anchorX = 'left';
+            this._levelIndicator.anchorY = 'middle';
+            this._levelIndicator.position.set(-0.75, -0.42, -1.4);
+            this._levelIndicator.sync();
+        }
 
-		// Create debug display
-		if (!this._debugDisplay) {
-			this._debugDisplay = createText('Score: 0', 0.06);
-			global.camera.add(this._debugDisplay);
-			this._debugDisplay.position.set(0, 0.25, -1.4);
-		}
-		//for black screen
-		this._ensureTransitionScreen(global);
+        // Create debug display
+        // Commented out for now so only the score HUD is visible.
+        /*
+        if (!this._debugDisplay) {
+            this._debugDisplay = createText('Score: 0', 0.06);
+            global.camera.add(this._debugDisplay);
+            this._debugDisplay.position.set(0, 0.25, -1.4);
+        }
+        */
 
-		// Initialize ring once
-		if (!this._ring && global.scene.getObjectByName('ring')) {
-			this._initializeRing(player, global, rotator, motionProfile);
-		}
+        this._ensureTransitionScreen(global);
+        this._updateGameplayHud(global);
 
+        // Initialize ring once
+        if (!this._ring && global.scene.getObjectByName('ring')) {
+            this._initializeRing(player, global, rotator, motionProfile);
+        }
 
-		if (this._levelTransition) {
-			this._updateLevelTransition(player, global, rotator, delta, motionProfile);
-			return;
-		}
+        if (this._levelTransition) {
+            this._updateLevelTransition(player, global, rotator, delta, motionProfile);
+            return;
+        }
 
-		if (global.gameState === 'lobby') {
-			this._handleLobbyState(player, rotator, isPresenting, global, motionProfile);
-		} else {
-			this._handleInGameState(player, global, rotator, delta, motionProfile);
-		}
-	}
+        if (global.gameState === 'lobby') {
+            this._handleLobbyState(player, rotator, isPresenting, global, motionProfile);
+        } else {
+            this._handleInGameState(player, global, rotator, delta, motionProfile);
+        }
+    }
 
 	_initializeRing(player, global, rotator, motionProfile) {
 		this._ring = global.scene.getObjectByName('ring');
@@ -771,30 +798,68 @@ export class GameSystem extends System {
 
 
 	_endGame(player, global) {
-		this._playGameOverAudio();
-		this._currentRunScore = global.score;
-		this._latest = global.score;
-		this._currentScore.text = global.score.toString();
-		this._currentScore.sync();
-		localforage.setItem(Constants.LATEST_SCORE_KEY, this._latest);
-		
-		if (global.score > this._record) {
-			console.log('best score updated:', global.score);
-			this._record = global.score;
-			this._recordScore.text = global.score.toString();
-			this._recordScore.sync();
-			localforage.setItem(Constants.RECORD_SCORE_KEY, this._record);
-		}
-		this._updateScoreboardUI();
-		global.gameState = 'lobby';
-		global.score = 0;
-		this._currentRunScore = 0;
-		this._updateScoreboardUI();
-		this._currentScore.text = '0';
-		this._currentScore.sync();
-		this._updateGameplayHud(global);
-		player.space.position.y = 4;
-	}
+        // Prevent double-triggering if endGame fires more than once
+        if (this._isRestarting) {
+            return;
+        }
+        this._isRestarting = true;
+
+        this._playGameOverAudio();
+
+        this._currentRunScore = global.score;
+        this._latest = global.score;
+        this._currentScore.text = global.score.toString();
+        this._currentScore.sync();
+
+        const saveOps = [];
+        saveOps.push(localforage.setItem(Constants.LATEST_SCORE_KEY, this._latest));
+
+        if (global.score > this._record) {
+            console.log('best score updated:', global.score);
+            this._record = global.score;
+            this._recordScore.text = global.score.toString();
+            this._recordScore.sync();
+            saveOps.push(localforage.setItem(Constants.RECORD_SCORE_KEY, this._record));
+        }
+
+        this._updateScoreboardUI();
+
+        // Reset in-memory state before leaving
+        global.gameState = 'lobby';
+        global.score = 0;
+        this._currentRunScore = 0;
+        this._currentScore.text = '0';
+        this._currentScore.sync();
+        this._updateGameplayHud(global);
+
+        // Hide transition screen just in case
+        if (this._hideTransitionScreen) {
+            this._hideTransitionScreen();
+        }
+
+        const reloadPage = () => {
+            setTimeout(() => {
+                if (typeof window !== 'undefined') {
+                    window.location.reload();
+                }
+            }, 250);
+        };
+
+        Promise.allSettled(saveOps).finally(() => {
+            const xrSession = global?.renderer?.xr?.getSession?.();
+
+            // End XR session first before reloading to avoid crashing
+            if (xrSession) {
+                xrSession.end().catch(() => {
+                    // Ignore XR session end errors and still reload
+                }).finally(() => {
+                    reloadPage();
+                });
+            } else {
+                reloadPage();
+            }
+        });
+    }
 
 	//new transitioning method with smooth lerp and optional transition text
 	_beginLevel2Transition(player, global) {
@@ -811,14 +876,36 @@ export class GameSystem extends System {
 
         this._levelTransition.elapsed += delta;
 
+        const {
+            nextLevelId,
+            currentLevelName,
+            nextLevelName,
+            elapsed,
+            duration,
+        } = this._levelTransition;
+
+        // Keep debug text simple during transition
         if (this._debugDisplay) {
             this._debugDisplay.text = `Transition...`;
             this._debugDisplay.sync();
         }
 
-        if (this._levelTransition.elapsed >= this._levelTransition.duration) {
-            const { nextLevelId } = this._levelTransition;
+        // 5-second transition behavior:
+        // 0-1 sec: show message only
+        // 1-2 sec: show 4
+        // 2-3 sec: show 3
+        // 3-4 sec: show 2
+        // 4-5 sec: show 1
+        if (elapsed >= 1 && elapsed < duration) {
+            const countdownValue = Math.max(1, 5 - Math.floor(elapsed));
+            this._updateTransitionScreenCountdown(
+                currentLevelName,
+                nextLevelName,
+                countdownValue
+            );
+        }
 
+        if (elapsed >= duration) {
             if (nextLevelId === 'level-2') {
                 this._finishLevel2Transition(player, global, rotator, motionProfile);
             } else if (nextLevelId === 'level-3') {
@@ -834,6 +921,7 @@ export class GameSystem extends System {
             this._hideTransitionScreen();
         }
     }
+
 
 	_finishLevel2Transition(player, global, rotator, motionProfile) {
 		const { nextLevelId, nextLevel } = this._levelTransition;
@@ -959,10 +1047,13 @@ export class GameSystem extends System {
         this._levelTransition = {
             nextLevelId,
             nextLevel,
+            currentLevelName: this._activeLevel.name,
+            nextLevelName: nextLevel.name,
             elapsed: 0,
             duration: 5.0,
         };
     }
+
 	_ensureTransitionScreen(global) {
         if (this._transitionScreen) {
             return;
@@ -1009,7 +1100,8 @@ export class GameSystem extends System {
 
         if (this._transitionScreenText) {
             this._transitionScreenText.text =
-                `Congratulations, you passed ${currentLevelName}.\nLoading next level: ${nextLevelName}.`;
+                `Congratulations, you passed ${currentLevelName}.\nNext level: ${nextLevelName}`;
+
             this._transitionScreenText.sync();
         }
 
@@ -1029,6 +1121,17 @@ export class GameSystem extends System {
             this._scoreBoard.visible = false;
         }
     }
+	_updateTransitionScreenCountdown(currentLevelName, nextLevelName, countdownValue) {
+        if (!this._transitionScreenText) {
+            return;
+        }
+
+        this._transitionScreenText.text =
+            `Congratulations, you passed ${currentLevelName}.\nNext level: ${nextLevelName}.\n\nLoading in: ${countdownValue}`;
+        this._transitionScreenText.sync();
+    }
+
+
 
     _hideTransitionScreen() {
         if (this._transitionScreen) {
@@ -1046,13 +1149,14 @@ export class GameSystem extends System {
     
 
 	_updateGameplayHud(global) {
-		if (!this._levelIndicator) {
-			return;
-		}
+        if (!this._levelIndicator) {
+            return;
+        }
 
-		this._levelIndicator.text = `Level: ${this._activeLevel.name} | Score: ${global.score}`;
-		this._levelIndicator.sync();
-	}
+        // Show only score in the HUD for now.
+        this._levelIndicator.text = `Score: ${global.score}`;
+        this._levelIndicator.sync();
+    }
 
 	_setPlayerSpaceFromHeadWorld(player, rotator, desiredHeadWorldPos) {
 		// Head position is local to player.space
