@@ -66,9 +66,9 @@ export const Constants = {
 			ringInterval: 1.75,
 			startingRingScale: 3.5,
 			ringShrinkMultiplier: 0.94,
-			ringMinY: 5,
-			ringMaxY: 11,
-			startingRingY: 7,
+			ringMinY: 7,
+			ringMaxY: 13,
+			startingRingY: 9,
 			proceduralScene: true,
 			angularDirection: -1,
 			ringHitPadding: 0.03,
@@ -78,15 +78,21 @@ export const Constants = {
 			ringInterval: 1.75,
 			startingRingScale: 3.5,
 			ringShrinkMultiplier: 0.94,
-			ringMinY: 7,
-			ringMaxY: 14,
-			startingRingY: 10,
+
+			// Raised spawn + ring range
+			ringMinY: 9,
+			ringMaxY: 16,
+			startingRingY: 12,
+
 			proceduralScene: true,
 			angularDirection: -1,
 			ringLeadMultiplier: 1.0,
+
+			// Lava safety
 			ringFloorPadding: 1.0,
 			ringHitPadding: 0.05,
 		},
+
 	},
 
 	// asset paths

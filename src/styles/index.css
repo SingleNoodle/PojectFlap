@@ -74,3 +74,28 @@
 	border-color: #949494;
 	background-color: #949494;
 }
+
+#ui-panel {
+    overflow: hidden;
+}
+
+.button-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.button-row .action-button {
+    margin-top: 0; /* override old top margin so everything lines up nicely */
+}
+
+#douglas-logo {
+    width: 90px;
+    height: auto;
+    object-fit: contain;
+    display: block;
+    position: static; /* important: removes absolute positioning */
+    margin-left: 6px;
+}
