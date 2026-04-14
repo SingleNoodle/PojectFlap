@@ -60,7 +60,7 @@ export class GameSystem extends System {
 		this._currentScoreElement = null;
 
 		this._currentScore = createText(0);
-		this._recordScore = createText(2);
+		this._recordScore = createText(0);
 		
 		//this._isLevelTransitioning = false;
 
@@ -70,7 +70,9 @@ export class GameSystem extends System {
 		this._levelTransition = null; 
 		// Will hold data for smooth level transitions when implemented
 		this._tmpVec3 = new Vector3();
+		this._tmpVec3B = new Vector3();
 		this._tmpQuat = new Quaternion();
+
 	
 		this._worldRecord = createText(0);
 		this._ranking = createText(0);
@@ -154,8 +156,6 @@ export class GameSystem extends System {
 		localforage.getItem(Constants.LATEST_SCORE_KEY).then((score) => {
 			if (typeof score === 'number') {
 				this._latest = score;
-				this._currentScore.text = score.toString();
-				this._currentScore.sync();
 				this._updateScoreboardUI();
 			}
 		});
@@ -329,143 +329,192 @@ export class GameSystem extends System {
 		this._updateScoreboardUI();
 		this._currentScore.text = '0';
 		this._currentScore.sync();
-		this._ringTimer;
 		this._flapData = {
 			left: { y: null, distance: 0, flaps: 0 },
 			right: { y: null, distance: 0, flaps: 0 },
 		};
 		const effectiveAngularSpeed =
-			motionProfile.angularSpeed * this._getAngularDirection();
+            motionProfile.angularSpeed * this._getAngularDirection();
 
-		this._ringRotator.quaternion.copy(rotator.quaternion);
-		this._ringRotator.rotateY(
-			effectiveAngularSpeed * this._activeLevel.ringInterval,
-		);
-		// Use level-specific starting Y if provided, otherwise default to 4.
-		const startingY = this._activeLevel.startingRingY !== undefined ? this._activeLevel.startingRingY : 4;
-		this._ring.position.y = startingY;
-		this._ring.scale.setScalar(this._activeLevel.startingRingScale);
-		this._ringTimer = this._activeLevel.ringInterval;
+        const ringLeadMultiplier = this._activeLevel.ringLeadMultiplier ?? 1.0;
+
+        this._ringRotator.quaternion.copy(rotator.quaternion);
+        this._ringRotator.rotateY(
+            effectiveAngularSpeed *
+                this._activeLevel.ringInterval *
+                ringLeadMultiplier,
+        );
+
+        const startingY =
+            this._activeLevel.startingRingY !== undefined
+                ? this._activeLevel.startingRingY
+                : 4;
+
+        this._ring.position.y = startingY;
+        this._ring.scale.setScalar(this._activeLevel.startingRingScale);
+
+        if (this._usesLevel4FloorClamp()) {
+            this._ring.position.y = this._clampRingYForFloor(
+                this._ring.position.y,
+                this._activeLevel
+            );
+        }
+
+        this._ringTimer = this._usesLevel4FloorClamp()
+            ? this._activeLevel.ringInterval * ringLeadMultiplier
+            : this._activeLevel.ringInterval;
+
 		this._ringNumber.text = '1';
 		this._ringNumber.sync();
 		this._updateGameplayHud(global);
 	}
 
 	_handleInGameState(player, global, rotator, delta, motionProfile) {
-		if (global.gameState !== 'ingame') {
-			return;
-		}
+        if (global.gameState !== 'ingame') {
+            return;
+        }
 
-		if(this._transitionGraceTimer > 0) {
-			this._transitionGraceTimer -= delta;
-			
-			if (this._transitionGraceTimer < 0) {
-				this._transitionGraceTimer = 0;
-			}
-			this._vertSpeed =0;
-			return; 
-		}
-		// Skip updating rings and score during grace period after level transition
+        if (this._transitionGraceTimer > 0) {
+            this._transitionGraceTimer -= delta;
 
-		if (this._ring) {
-			this._ringTimer -= delta;
-			if (this._ringTimer < 0) {
-				const ringRadius = this._ring.scale.x / 2;
-				if (
-					Math.abs(player.space.position.y - this._ring.position.y) < ringRadius
-				) {
-					this._updateScore(player, global, rotator, motionProfile);
-				} else {
-					this._endGame(player, global);
-				}
-			}
-		}
-	}
+            if (this._transitionGraceTimer < 0) {
+                this._transitionGraceTimer = 0;
+            }
+
+            return;
+        }
+
+        if (this._ring) {
+            this._ringTimer -= delta;
+
+            if (this._ringTimer < 0) {
+                const ringRadius = this._usesNeonRingHitbox()
+                    ? this._getRingPassRadius(this._activeLevel)
+                    : this._ring.scale.x / 2;
+
+                if (
+                    Math.abs(player.space.position.y - this._ring.position.y) <= ringRadius
+                ) {
+                    this._updateScore(player, global, rotator, motionProfile);
+                } else {
+                    this._endGame(player, global);
+                }
+            }
+        }
+    }
+
 
 	_updateScore(player, global, rotator, motionProfile) {
-		global.score += 1;
-		this._playPointAudio();
-		this._currentRunScore = global.score;
-		this._updateScoreboardUI();
-		this._currentScore.text = global.score.toString();
-		this._currentScore.sync();
+        global.score += 1;
+        this._playPointAudio();
+        this._currentRunScore = global.score;
+        this._updateScoreboardUI();
+        this._currentScore.text = global.score.toString();
+        this._currentScore.sync();
 
-		if (this._ringNumber) {
-			this._ringNumber.text = (global.score + 1).toString();
-			this._ringNumber.sync();
-		}
+        if (this._ringNumber) {
+            this._ringNumber.text = (global.score + 1).toString();
+            this._ringNumber.sync();
+        }
 
-		this._updateGameplayHud(global);
+        this._updateGameplayHud(global);
 
-		// Debug display
-		if (this._debugDisplay) {
-			this._debugDisplay.text = `Score: ${global.score} | Level: ${global.levelId} | Active: ${this._activeLevel.name}`;
-			this._debugDisplay.sync();
-		}
+        // Debug display
+        if (this._debugDisplay) {
+            this._debugDisplay.text = `Score: ${global.score} | Level: ${global.levelId} | Active: ${this._activeLevel.name}`;
+            this._debugDisplay.sync();
+        }
 
-		const currentLevelId = Object.keys(Constants.LEVELS).find(
-			key => Constants.LEVELS[key] === this._activeLevel
-		);
+        const currentLevelId = Object.keys(Constants.LEVELS).find(
+            (key) => Constants.LEVELS[key] === this._activeLevel
+        );
 
-		// Level 1 -> Level 2
-		if (
-			!this._levelTransition &&
-			global.score >= 1 &&
-			currentLevelId === 'level-1'
-		) {
-			console.log('Level complete! Transitioning to level-2...');
-			this._beginLevel2Transition(player, global);
-			return;
-		}
+        // Level 1 -> Level 2
+        if (
+            !this._levelTransition &&
+            global.score >= 1 &&
+            currentLevelId === 'level-1'
+        ) {
+            console.log('Level complete! Transitioning to level-2...');
+            this._beginLevel2Transition(player, global);
+            return;
+        }
 
-		// Level 2 -> Level 3
-		if (
-			!this._isLevelTransitioning &&
-			currentLevelId === 'level-2' &&
-			global.score >= 2
-		) {
-			this._isLevelTransitioning = true;
-			console.log('Level complete! Advancing to level-3: Neon Cavern...');
-			this._transitionToLevel3(player, global, rotator, motionProfile);
-			this._isLevelTransitioning = false;
-			return;
-		}
-		if (
-			!this._isLevelTransitioning &&
-			currentLevelId == 'level-3' &&
-			global.score >=4
-		){
-			this._isLevelTransitioning = true;
-			console.log('Level complete! Advancing to level-4: Molten Rift...');
-			this._transitionToLevel4(player, global, rotator, motionProfile);
-			this.isLevelTransitioning = false;
-			return;
-		}
+        // Level 2 -> Level 3
+        if (
+            !this._isLevelTransitioning &&
+            currentLevelId === 'level-2' &&
+            global.score >= 2
+        ) {
+            this._isLevelTransitioning = true;
+            console.log('Level complete! Advancing to level-3: Neon Cavern...');
+            this._transitionToLevel3(player, global, rotator, motionProfile);
+            this._isLevelTransitioning = false;
+            return;
+        }
 
-		const effectiveAngularSpeed =
-			motionProfile.angularSpeed * this._getAngularDirection();
+        // Level 3 -> Level 4
+        if (
+            !this._isLevelTransitioning &&
+            currentLevelId === 'level-3' &&
+            global.score >= 4
+        ) {
+            this._isLevelTransitioning = true;
+            console.log('Level complete! Advancing to level-4: Molten Rift...');
+            this._transitionToLevel4(player, global, rotator, motionProfile);
+            this._isLevelTransitioning = false;
+            return;
+        }
 
-		const ringLeadMultiplier = this._activeLevel.ringLeadMultiplier ?? 1.0;
+        const effectiveAngularSpeed =
+            motionProfile.angularSpeed * this._getAngularDirection();
 
-		this._ringRotator.quaternion.copy(rotator.quaternion);
-		this._ringRotator.rotateY(
-			effectiveAngularSpeed *
-				this._activeLevel.ringInterval *
-				ringLeadMultiplier,
-		);
+        const ringLeadMultiplier = this._activeLevel.ringLeadMultiplier ?? 1.0;
 
-		// Generate ring position
-		const yRange = this._activeLevel.ringMaxY - this._activeLevel.ringMinY;
-		let newY = Math.random() * yRange + this._activeLevel.ringMinY;
+        this._ringRotator.quaternion.copy(rotator.quaternion);
+        this._ringRotator.rotateY(
+            effectiveAngularSpeed *
+                this._activeLevel.ringInterval *
+                ringLeadMultiplier
+        );
 
-		if (this._activeLevel.ringReversed) {
-			newY = this._activeLevel.ringMaxY - (newY - this._activeLevel.ringMinY);
-		}
+        if (this._usesLevel4FloorClamp()) {
+            // Level 4 only: keep ring above lava/floor
+            this._ring.scale.multiplyScalar(this._activeLevel.ringShrinkMultiplier);
 
-		this._ring.position.y = newY;
-		this._ring.scale.multiplyScalar(this._activeLevel.ringShrinkMultiplier);
-		this._ringTimer = this._activeLevel.ringInterval;
-	}
+            const minY = this._activeLevel.ringMinY;
+            const maxY = this._activeLevel.ringMaxY;
+            const yRange = Math.max(0, maxY - minY);
+
+            let newY = Math.random() * yRange + minY;
+
+            if (this._activeLevel.ringReversed) {
+                newY = maxY - (newY - minY);
+            }
+
+            newY = this._clampRingYForFloor(newY, this._activeLevel);
+
+            this._ring.position.y = newY;
+        } else {
+            // Original behavior for levels 1–3
+            const yRange = this._activeLevel.ringMaxY - this._activeLevel.ringMinY;
+            let newY = Math.random() * yRange + this._activeLevel.ringMinY;
+
+            if (this._activeLevel.ringReversed) {
+                newY =
+                    this._activeLevel.ringMaxY -
+                    (newY - this._activeLevel.ringMinY);
+            }
+
+            this._ring.position.y = newY;
+            this._ring.scale.multiplyScalar(this._activeLevel.ringShrinkMultiplier);
+        }
+
+        // Level 4 places rings farther ahead, so timer must match that distance
+        this._ringTimer = this._usesLevel4FloorClamp()
+            ? this._activeLevel.ringInterval * ringLeadMultiplier
+            : this._activeLevel.ringInterval;
+    }
 
 	//old transitioning method for reference, kept in case we want to revert to instant transition or need it for debugging
 	/*
@@ -610,69 +659,79 @@ export class GameSystem extends System {
 		console.log('Ring local pos:', this._ring.position);
 		console.log('Ring object:', this._ring);
 	}
+
 	_transitionToLevel4(player, global, rotator, motionProfile) {
-		const nextLevelId = 'level-4';
-		const nextLevel = Constants.LEVELS[nextLevelId];
+        const nextLevelId = 'level-4';
+        const nextLevel = Constants.LEVELS[nextLevelId];
 
-		global.levelId = nextLevelId;
-		global.level = nextLevel;
-		this._activeLevel = nextLevel;
+        global.levelId = nextLevelId;
+        global.level = nextLevel;
+        this._activeLevel = nextLevel;
 
-		const oldCave = global.scene.getObjectByName('proceduralCave');
-		if (oldCave) global.scene.remove(oldCave);
+        const oldCave = global.scene.getObjectByName('proceduralCave');
+        if (oldCave) global.scene.remove(oldCave);
 
-		const oldMolten = global.scene.getObjectByName('proceduralMoltenRift');
-		if (oldMolten) global.scene.remove(oldMolten);
+        const oldMolten = global.scene.getObjectByName('proceduralMoltenRift');
+        if (oldMolten) global.scene.remove(oldMolten);
 
-		if (this._ringRotator && this._ringRotator.parent) {
-			this._ringRotator.parent.remove(this._ringRotator);
-		}
+        if (this._ringRotator && this._ringRotator.parent) {
+            this._ringRotator.parent.remove(this._ringRotator);
+        }
 
-		const cave = createMoltenRift(global.scene);
-		global.scene.add(cave);
+        const cave = createMoltenRift(global.scene);
+        global.scene.add(cave);
 
-		const startY = nextLevel.startingRingY ?? 8;
-		const playerLocalX = 0;
-		const playerLocalZ = -34;
+        const startY = nextLevel.startingRingY ?? 8;
+        const playerLocalX = 0;
+        const playerLocalZ = -34;
 
-		player.space.position.set(playerLocalX, startY, playerLocalZ);
+        player.space.position.set(playerLocalX, startY, playerLocalZ);
 
-		const ring = createNeonRing();
-		ring.position.set(playerLocalX, startY, playerLocalZ);
-		ring.scale.setScalar(nextLevel.startingRingScale);
+        const ring = createNeonRing();
+        ring.position.set(playerLocalX, startY, playerLocalZ);
+        ring.scale.setScalar(nextLevel.startingRingScale);
 
-		this._ringRotator = new Group();
-		this._ringRotator.add(ring);
-		global.scene.add(this._ringRotator);
+        this._ringRotator = new Group();
+        this._ringRotator.add(ring);
+        global.scene.add(this._ringRotator);
 
-		this._ring = ring;
+        this._ring = ring;
+        this._ring.position.y = this._clampRingYForFloor(
+            this._ring.position.y,
+            nextLevel
+        );
 
-		if (this._ringNumber && this._ringNumber.parent) {
-			this._ringNumber.parent.remove(this._ringNumber);
-		}
+        if (this._ringNumber && this._ringNumber.parent) {
+            this._ringNumber.parent.remove(this._ringNumber);
+        }
 
-		const ringNumber = new Text();
-		ringNumber.text = (global.score + 1).toString();
-		ringNumber.fontSize = 0.6;
-		ringNumber.anchorX = 'center';
-		ringNumber.anchorY = 'middle';
-		ringNumber.rotateY(Math.PI);
-		ringNumber.sync();
+        const ringNumber = new Text();
+        ringNumber.text = (global.score + 1).toString();
+        ringNumber.fontSize = 0.6;
+        ringNumber.anchorX = 'center';
+        ringNumber.anchorY = 'middle';
+        ringNumber.rotateY(Math.PI);
+        ringNumber.sync();
 
-		this._ring.add(ringNumber);
-		this._ringNumber = ringNumber;
+        this._ring.add(ringNumber);
+        this._ringNumber = ringNumber;
 
-		const effectiveAngularSpeed =
-			motionProfile.angularSpeed * this._getAngularDirection();
+        const effectiveAngularSpeed =
+            motionProfile.angularSpeed * this._getAngularDirection();
 
-		this._ringRotator.quaternion.copy(rotator.quaternion);
-		this._ringRotator.rotateY(
-			effectiveAngularSpeed * nextLevel.ringInterval * 2.0
-		);
+        const ringLeadMultiplier = nextLevel.ringLeadMultiplier ?? 1.0;
 
-		this._ringTimer = nextLevel.ringInterval;
-		this._transitionGraceTimer = 2.0;
-	}	
+        this._ringRotator.quaternion.copy(rotator.quaternion);
+        this._ringRotator.rotateY(
+            effectiveAngularSpeed *
+                nextLevel.ringInterval *
+                ringLeadMultiplier
+        );
+
+        this._ringTimer = nextLevel.ringInterval * ringLeadMultiplier;
+        this._transitionGraceTimer = 2.0;
+    }
+	
 
 
 
@@ -819,9 +878,99 @@ export class GameSystem extends System {
 		player.space.position.copy(desiredHeadLocalToRotator.sub(headLocalPos));
 	}
 
+	_usesNeonRingHitbox(level = this._activeLevel) {
+        return (
+            level === Constants.LEVELS['level-3'] ||
+            level === Constants.LEVELS['level-4']
+        );
+    }
+
+    _usesLevel4FloorClamp(level = this._activeLevel) {
+        return level === Constants.LEVELS['level-4'];
+    }
+
+	_getRingPassRadius(level = this._activeLevel) {
+        if (!this._ring) {
+            return 0;
+        }
+
+        // Matches createNeonRing() geometry:
+        // inner pass-through radius is about 0.94 of the ring scale.
+        const baseInnerRadius = 0.94;
+        const padding = level?.ringHitPadding ?? 0;
+
+        return Math.max(0.1, this._ring.scale.y * baseInnerRadius - padding);
+    }
+
+    _getRingOuterRadius() {
+        if (!this._ring) {
+            return 0;
+        }
+
+        // Matches createNeonRing() geometry:
+        // visible outer radius is about 1.06 of the ring scale.
+        return this._ring.scale.y * 1.06;
+    }
+
+    _clampRingYForFloor(desiredY, level = this._activeLevel) {
+        if (!this._ring || !level) {
+            return desiredY;
+        }
+
+        // Only levels that define ringFloorPadding will be affected.
+        const floorPadding = level.ringFloorPadding ?? 0;
+
+        if (floorPadding <= 0) {
+            return desiredY;
+        }
+
+        const floorY = 0;
+        const minSafeY = Math.max(
+            level.ringMinY,
+            floorY + this._getRingOuterRadius() + floorPadding
+        );
+
+        const maxSafeY = Math.max(minSafeY, level.ringMaxY);
+
+        return Math.min(maxSafeY, Math.max(minSafeY, desiredY));
+    }
+
+	_getPlayerRingHorizontalDistance(player) {
+        if (!this._ring) {
+            return Infinity;
+        }
+
+        const playerWorld = player.space.getWorldPosition(this._tmpVec3);
+        const ringWorld = this._ring.getWorldPosition(this._tmpVec3B);
+
+        const dx = playerWorld.x - ringWorld.x;
+        const dz = playerWorld.z - ringWorld.z;
+
+        return Math.hypot(dx, dz);
+    }
+
+    _getRingContactDistance() {
+        if (!this._ring) {
+            return 0;
+        }
+
+        // This decides how close the ring center must be in XZ space
+        // before we count it as "reaching" the player.
+        //
+        // Slightly generous on purpose so point timing feels natural
+        // and audio isn't delayed.
+        return Math.max(1.25, this._ring.scale.x * 0.45);
+    }
+	_isLevel4(level = this._activeLevel) {
+        return level === Constants.LEVELS['level-4'];
+    }
+
+	
+
 	_getAngularDirection() {
 		return this._activeLevel?.angularDirection ?? 1;
 	}
+
 
 }
 
