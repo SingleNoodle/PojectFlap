@@ -74,16 +74,19 @@ export const Constants = {
 		},
 		'level-4': {
 			name: 'Molten Rift',
-			ringInterval: 1.45,
-			startingRingScale: 3.1,
-			ringShrinkMultiplier: 0.93,
-			ringMinY: 3,
-			ringMaxY: 16,
-			startingRingY: 8,
+			ringInterval: 1.75,
+			startingRingScale: 3.5,
+			ringShrinkMultiplier: 0.94,
+			ringMinY: 1,
+			ringMaxY: 8,
+			startingRingY: 5,
 			proceduralScene: true,
 			angularDirection: -1,
-			ringLeadMultiplier: 2.0,
+			ringLeadMultiplier: 1.0,
+			ringFloorPadding: 0.5,
+			ringHitPadding: 0.05,
 		},
+
 	},
 
 	// asset paths
