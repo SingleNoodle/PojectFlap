@@ -4,24 +4,25 @@
  */
 
 import {
-	Color,
-	ConeGeometry,
-	DoubleSide,
-	FogExp2,
-	Group,
-	IcosahedronGeometry,
-	Mesh,
-	MeshStandardMaterial,
-	PlaneGeometry,
-	PointLight,
-	TorusGeometry,
+    BoxGeometry,
+    Color,
+    ConeGeometry,
+    DoubleSide,
+    FogExp2,
+    Group,
+    IcosahedronGeometry,
+    Mesh,
+	MeshBasicMaterial,
+    MeshStandardMaterial,
+    PlaneGeometry,
+    PointLight,
 } from 'three';
 
 // Cave dimensions (all in Three.js units)
-const CAVE_HALF_W = 28;
-const CAVE_HALF_D = 55;
+const CAVE_HALF_W = 46;
+const CAVE_HALF_D = 65;
 const FLOOR_Y = 0;
-const CEILING_Y = 13;
+const CEILING_Y = 30;
 const CAVE_H = CEILING_Y - FLOOR_Y;
 
 const CRYSTAL_COLORS = [0x00ffff, 0xff00ff, 0x7700ff, 0x00ff88, 0xff6600];
@@ -31,19 +32,42 @@ const CRYSTAL_COLORS = [0x00ffff, 0xff00ff, 0x7700ff, 0x00ff88, 0xff6600];
  * Named 'ring' so the existing GameSystem can find it via getObjectByName.
  */
 export function createNeonRing() {
-	const geo = new TorusGeometry(1, 0.07, 16, 64);
-	const mat = new MeshStandardMaterial({
-		color: 0x00ffff,
-		emissive: new Color(0x00ffff),
-		emissiveIntensity: 1.2,
-		roughness: 0,
-		metalness: 1,
-	});
-	const ring = new Mesh(geo, mat);
-	ring.name = 'ring';
-	ring.position.set(0, 5, 34);
-	return ring;
+    const ring = new Group();
+    ring.name = 'ring';
+
+    const radius = 1.0;
+    const segmentCount = 24;
+    const segmentLength = 0.24;
+    const segmentThickness = 0.12;
+    const segmentDepth = 0.12;
+
+    const colors = [0xffffff, 0x8fb6ff]; // white + soft blue
+
+    for (let i = 0; i < segmentCount; i++) {
+        const angle = (i / segmentCount) * Math.PI * 2;
+
+        const segment = new Mesh(
+            new BoxGeometry(segmentLength, segmentThickness, segmentDepth),
+            new MeshBasicMaterial({
+                color: colors[i % 2],
+            }),
+        );
+
+        segment.position.set(
+            Math.cos(angle) * radius,
+            Math.sin(angle) * radius,
+            0
+        );
+
+        segment.rotation.z = angle + Math.PI / 2;
+        ring.add(segment);
+    }
+	ring.rotation.y = Math.PI / 2;
+    ring.position.set(0, 5, 34);
+	
+    return ring;
 }
+
 
 /**
  * Builds the procedural cave environment and returns a Group.

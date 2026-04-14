@@ -69,8 +69,8 @@ export const Constants = {
 			ringMinY: 1,
 			ringMaxY: 8,
 			startingRingY: 5,
-			// Signals that this level uses procedural geometry instead of a GLTF file.
 			proceduralScene: true,
+			angularDirection: -1,
 		},
 	},
 

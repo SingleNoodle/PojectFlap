@@ -45,6 +45,7 @@ export class GameSystem extends System {
 			left: { y: null, distance: 0, flaps: 0 },
 			right: { y: null, distance: 0, flaps: 0 },
 		};
+		
 		this._ring = null;
 		this._ringNumber = null;
 		this._ringTimer = this._activeLevel.ringInterval;
@@ -63,7 +64,7 @@ export class GameSystem extends System {
 		
 		//this._isLevelTransitioning = false;
 
-		this._transitionGraceTimer =1.0;
+		this._transitionGraceTimer =0;
 		//Timer to help orientate players after level transition by temporarily pausing ring movement and score updates.
 		
 		this._levelTransition = null; 
@@ -240,10 +241,6 @@ export class GameSystem extends System {
 			this._initializeRing(player, global, rotator, motionProfile);
 		}
 
-		// If transition is active, update it and stop here
-		if (!this._ring && global.scene.getObjectByName('ring')) {
-			this._initializeRing(player, global, rotator, motionProfile);
-		}
 
 		if (this._levelTransition) {
 			this._updateLevelTransition(player, global, rotator, delta, motionProfile);
@@ -361,6 +358,11 @@ export class GameSystem extends System {
 
 		if(this._transitionGraceTimer > 0) {
 			this._transitionGraceTimer -= delta;
+			
+			if (this._transitionGraceTimer < 0) {
+				this._transitionGraceTimer = 0;
+			}
+			this._vertSpeed =0;
 			return; 
 		}
 		// Skip updating rings and score during grace period after level transition
@@ -387,29 +389,28 @@ export class GameSystem extends System {
 		this._updateScoreboardUI();
 		this._currentScore.text = global.score.toString();
 		this._currentScore.sync();
-		this._ringNumber.text = (global.score + 1).toString();
-		this._ringNumber.sync();
+
+		if (this._ringNumber) {
+			this._ringNumber.text = (global.score + 1).toString();
+			this._ringNumber.sync();
+		}
+
 		this._updateGameplayHud(global);
-		
-		// DEBUG: Log score and level info
-		console.log(`Score: ${global.score}, Level: ${global.levelId}, Transitioning: ${this._isLevelTransitioning}`);
-		
-		// Update in-VR debug display
+
+		// Debug display
 		if (this._debugDisplay) {
 			this._debugDisplay.text = `Score: ${global.score} | Level: ${global.levelId} | Active: ${this._activeLevel.name}`;
 			this._debugDisplay.sync();
 		}
-		
-		// Advance from level-1 to level-2 once score reaches threshold.
-		// Check _activeLevel instead of global.levelId to avoid stale data.
+
 		const currentLevelId = Object.keys(Constants.LEVELS).find(
 			key => Constants.LEVELS[key] === this._activeLevel
 		);
-		
-		
+
+		// Level 1 -> Level 2
 		if (
 			!this._levelTransition &&
-			global.score >= 5 &&
+			global.score >= 1 &&
 			currentLevelId === 'level-1'
 		) {
 			console.log('Level complete! Transitioning to level-2...');
@@ -417,10 +418,11 @@ export class GameSystem extends System {
 			return;
 		}
 
+		// Level 2 -> Level 3
 		if (
 			!this._isLevelTransitioning &&
-			global.score >= 10 &&
-			currentLevelId === 'level-2'
+			currentLevelId === 'level-2' &&
+			global.score >= 2
 		) {
 			this._isLevelTransitioning = true;
 			console.log('Level complete! Advancing to level-3: Neon Cavern...');
@@ -429,7 +431,6 @@ export class GameSystem extends System {
 			return;
 		}
 
-		
 		const effectiveAngularSpeed =
 			motionProfile.angularSpeed * this._getAngularDirection();
 
@@ -437,19 +438,20 @@ export class GameSystem extends System {
 		this._ringRotator.rotateY(
 			effectiveAngularSpeed * this._activeLevel.ringInterval,
 		);
-		
-		// Generate ring position (reversed for level-2: high Y to low Y).
+
+		// Generate ring position
 		const yRange = this._activeLevel.ringMaxY - this._activeLevel.ringMinY;
 		let newY = Math.random() * yRange + this._activeLevel.ringMinY;
+
 		if (this._activeLevel.ringReversed) {
-			// Invert Y position: map [minY, maxY] -> [maxY, minY]
 			newY = this._activeLevel.ringMaxY - (newY - this._activeLevel.ringMinY);
 		}
+
 		this._ring.position.y = newY;
-		
 		this._ring.scale.multiplyScalar(this._activeLevel.ringShrinkMultiplier);
 		this._ringTimer = this._activeLevel.ringInterval;
 	}
+
 	//old transitioning method for reference, kept in case we want to revert to instant transition or need it for debugging
 	/*
 	_transitionToLevel2(player, global, rotator, motionProfile) {
@@ -499,36 +501,99 @@ export class GameSystem extends System {
 		const nextLevelId = 'level-3';
 		const nextLevel = Constants.LEVELS[nextLevelId];
 
+		// Update active level state
 		global.levelId = nextLevelId;
 		global.level = nextLevel;
 		this._activeLevel = nextLevel;
 
-		// Swap out the GLTF scene for the procedural cave.
-		const gltfScene = global.scene.getObjectByName('gltfScene');
-		if (gltfScene) global.scene.remove(gltfScene);
-		global.scene.add(createProceduralCave(global.scene));
-
-		// Replace the old ring mesh with a neon TorusGeometry ring.
-		const newRing = createNeonRing();
-		if (this._ringNumber) this._ring.remove(this._ringNumber);
-		this._ringRotator.remove(this._ring);
-		this._ringRotator.add(newRing);
-		this._ring = newRing;
-		if (this._ringNumber) {
-			this._ring.add(this._ringNumber);
+		// Remove old GLTF scene
+		const oldGltfScene = global.scene.getObjectByName('gltfScene');
+		if (oldGltfScene) {
+			global.scene.remove(oldGltfScene);
 		}
 
-		const startY = nextLevel.startingRingY !== undefined ? nextLevel.startingRingY : 5;
-		player.space.position.set(0, startY, 0);
+		// Remove old cave if it exists
+		const oldCave = global.scene.getObjectByName('proceduralCave');
+		if (oldCave) {
+			global.scene.remove(oldCave);
+		}
+
+		// Remove old ring rotator
+		if (this._ringRotator && this._ringRotator.parent) {
+			this._ringRotator.parent.remove(this._ringRotator);
+		}
+
+		// Remove any leftover ring
+		const existingRing = global.scene.getObjectByName('ring');
+		if (existingRing && existingRing.parent) {
+			existingRing.parent.remove(existingRing);
+		}
+
+		// Build procedural cave
+		const cave = createProceduralCave(global.scene);
+		global.scene.add(cave);
+
+		const startY = nextLevel.startingRingY ?? 5;
+
+		// IMPORTANT:
+		// Keep player on the SAME orbit/path system used by the other levels.
+		// Use the opposite side of the orbit like level 2 does.
+		const playerLocalX = 0;
+		const playerLocalZ = -34;
+
+		player.space.position.set(playerLocalX, startY, playerLocalZ);
+
+		// Create new ring
+		const ring = createNeonRing();
+		ring.position.set(playerLocalX, startY, playerLocalZ);
+		ring.scale.setScalar(nextLevel.startingRingScale);
+		ring.visible = true;
+
+		// Create new ring rotator
+		this._ringRotator = new Group();
+		this._ringRotator.add(ring);
+		global.scene.add(this._ringRotator);
+
+		this._ring = ring;
+
+		// Recreate / reattach number text to the NEW ring
+		if (this._ringNumber && this._ringNumber.parent) {
+			this._ringNumber.parent.remove(this._ringNumber);
+		}
+
+		const ringNumber = new Text();
+		ringNumber.text = (global.score + 1).toString();
+		ringNumber.fontSize = 0.6;
+		ringNumber.anchorX = 'center';
+		ringNumber.anchorY = 'middle';
+		ringNumber.rotateY(Math.PI);
+		ringNumber.sync();
+
+		this._ring.add(ringNumber);
+		this._ringNumber = ringNumber;
+
+		// Match the same forward/orbit behavior as other levels
+		const effectiveAngularSpeed =
+			motionProfile.angularSpeed * this._getAngularDirection();
 
 		this._ringRotator.quaternion.copy(rotator.quaternion);
-		this._ringRotator.rotateY(motionProfile.angularSpeed * nextLevel.ringInterval);
-		this._ring.position.set(0, startY, 34);
-		this._ring.scale.setScalar(nextLevel.startingRingScale);
+		this._ringRotator.rotateY(
+			effectiveAngularSpeed * nextLevel.ringInterval * 2
+		);
+
 		this._ringTimer = nextLevel.ringInterval;
-		this._ringNumber.text = (global.score + 1).toString();
-		this._ringNumber.sync();
+
+		// Give player time before fail check
+		this._transitionGraceTimer = 2.0;
+
+		// Optional debug logs
+		console.log('Transitioned to Level 3');
+		console.log('Player local pos:', player.space.position);
+		console.log('Ring local pos:', this._ring.position);
+		console.log('Ring object:', this._ring);
 	}
+
+
 
 	_endGame(player, global) {
 		this._playGameOverAudio();
