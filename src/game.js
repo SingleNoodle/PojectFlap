@@ -175,11 +175,13 @@ export class GameSystem extends System {
 		});
 
 		localforage.getItem(Constants.LATEST_SCORE_KEY).then((score) => {
-			if (typeof score === 'number') {
-				this._latest = score;
-				this._updateScoreboardUI();
-			}
-		});
+            if (typeof score === 'number') {
+                this._latest = score;
+                this._currentScore.text = score.toString();
+                this._currentScore.sync();
+                this._updateScoreboardUI();
+            }
+        });
 
 		localforage.getItem(Constants.PLAYER_ID_KEY).then((playerId) => {
 			if (playerId) {
@@ -206,34 +208,30 @@ export class GameSystem extends System {
 	}
 
 	_setupScoreBoard(player) {
-        if (!this._scoreBoard) {
-            // Restore the original in-world scoreboard PNG setup.
-            this._scoreBoard = new Mesh(
-                new PlaneGeometry(2, 1),
-                new MeshBasicMaterial({ map: SCORE_BOARD_TEXTURE, transparent: true }),
-            );
-            player.space.add(this._scoreBoard);
-            this._scoreBoard.position.set(0, 1.5, -2);
+		if (!this._scoreBoard) {
+			this._scoreBoard = new Mesh(
+				new PlaneGeometry(2, 1),
+				new MeshBasicMaterial({ map: SCORE_BOARD_TEXTURE, transparent: true }),
+			);
+			player.space.add(this._scoreBoard);
+			this._scoreBoard.position.set(0, 1.5, -2);
 
-            // Original repo-style board values:
-            // current score on the left, record score on the right.
-            this._addTextToScoreBoard(this._currentScore, -0.4, 0.2, 0.08);
-            this._addTextToScoreBoard(this._recordScore, 0.4, 0.2, 0.08);
-
-            // If you ever want only one value again, keep these older options commented:
-            // this._addTextToScoreBoard(this._currentScore, 0, 0.18, 0.12);
-            // this._addTextToScoreBoard(this._recordScore, 0.4, 0.2, 0.08);
-        }
-    }
+			// Add score texts to the scoreboard
+			this._addTextToScoreBoard(this._currentScore, -0.15, -0.22);
+			this._addTextToScoreBoard(this._recordScore, -0.15, -0.36);
+			this._addTextToScoreBoard(this._ranking, 0.8, -0.22);
+			this._addTextToScoreBoard(this._worldRecord, 0.8, -0.36);
+		}
+	}
 
 
 
-	_addTextToScoreBoard(text, x, y, fontSize = 0.08) {
+
+	_addTextToScoreBoard(text, x, y) {
 		this._scoreBoard.add(text);
 		text.position.set(x, y, 0.001);
-		text.fontSize = fontSize;
-		text.sync();
 	}
+
 
 	_manageGameStates(global, player, delta) {
         this._activeLevel =
@@ -320,24 +318,34 @@ export class GameSystem extends System {
 	}
 
 	_handleLobbyState(player, rotator, isPresenting, global, motionProfile) {
-		if (isPresenting) {
-			this._scoreBoard.visible = true;
-			for (let entry of Object.entries(player.controllers)) {
-				const [handedness, controller] = entry;
-				const thisFrameY = controller.targetRaySpace.position.y;
-				const lastFrameY = this._flapData[handedness].y;
+        if (isPresenting) {
+            // Show original in-world scoreboard in lobby
+            if (this._scoreBoard) {
+                this._scoreBoard.visible = true;
+            }
 
-				this._manageFlapData(handedness, thisFrameY, lastFrameY);
+            // Hide bottom-left HUD while the scoreboard is visible,
+            // so it feels like the original repo.
+            if (this._levelIndicator) {
+                this._levelIndicator.visible = false;
+            }
 
-				if (
-					this._flapData[handedness].flaps >= Constants.NUM_FLAPS_TO_START_GAME
-				) {
-					this._startGame(global, rotator, motionProfile);
-					break;
-				}
-			}
-		}
-	}
+            for (let entry of Object.entries(player.controllers)) {
+                const [handedness, controller] = entry;
+                const thisFrameY = controller.targetRaySpace.position.y;
+                const lastFrameY = this._flapData[handedness].y;
+
+                this._manageFlapData(handedness, thisFrameY, lastFrameY);
+
+                if (
+                    this._flapData[handedness].flaps >= Constants.NUM_FLAPS_TO_START_GAME
+                ) {
+                    this._startGame(global, rotator, motionProfile);
+                    break;
+                }
+            }
+        }
+    }
 
 	_manageFlapData(handedness, thisFrameY, lastFrameY) {
 		if (lastFrameY) {
@@ -409,6 +417,16 @@ export class GameSystem extends System {
             return;
         }
 
+        // Hide old lobby scoreboard during gameplay
+        if (this._scoreBoard) {
+            this._scoreBoard.visible = false;
+        }
+
+        // Re-show bottom-left HUD during gameplay
+        if (this._levelIndicator) {
+            this._levelIndicator.visible = true;
+        }
+
         if (this._transitionGraceTimer > 0) {
             this._transitionGraceTimer -= delta;
 
@@ -437,6 +455,7 @@ export class GameSystem extends System {
             }
         }
     }
+
 
 
 	_updateScore(player, global, rotator, motionProfile) {
@@ -806,59 +825,43 @@ export class GameSystem extends System {
 
         this._playGameOverAudio();
 
-        this._currentRunScore = global.score;
+        // Save latest score
         this._latest = global.score;
-        this._currentScore.text = global.score.toString();
-        this._currentScore.sync();
 
-        const saveOps = [];
-        saveOps.push(localforage.setItem(Constants.LATEST_SCORE_KEY, this._latest));
-
+        // Update record if needed
         if (global.score > this._record) {
             console.log('best score updated:', global.score);
             this._record = global.score;
             this._recordScore.text = global.score.toString();
             this._recordScore.sync();
-            saveOps.push(localforage.setItem(Constants.RECORD_SCORE_KEY, this._record));
+            localforage.setItem(Constants.RECORD_SCORE_KEY, this._record);
         }
 
+        // Save latest score to storage
+        localforage.setItem(Constants.LATEST_SCORE_KEY, this._latest);
+
+        // Show latest score on the old in-world scoreboard like the original repo
+        this._currentScore.text = this._latest.toString();
+        this._currentScore.sync();
+
+        // Reset browser "current score" tracker
+        this._currentRunScore = 0;
         this._updateScoreboardUI();
 
-        // Reset in-memory state before leaving
+        // Reset gameplay state
         global.gameState = 'lobby';
         global.score = 0;
-        this._currentRunScore = 0;
-        this._currentScore.text = '0';
-        this._currentScore.sync();
-        this._updateGameplayHud(global);
 
         // Hide transition screen just in case
         if (this._hideTransitionScreen) {
             this._hideTransitionScreen();
         }
 
-        const reloadPage = () => {
-            setTimeout(() => {
-                if (typeof window !== 'undefined') {
-                    window.location.reload();
-                }
-            }, 250);
-        };
+        // Reset everything back to level-1 without reloading the page
+        this._resetToLevel1(global, player);
 
-        Promise.allSettled(saveOps).finally(() => {
-            const xrSession = global?.renderer?.xr?.getSession?.();
-
-            // End XR session first before reloading to avoid crashing
-            if (xrSession) {
-                xrSession.end().catch(() => {
-                    // Ignore XR session end errors and still reload
-                }).finally(() => {
-                    reloadPage();
-                });
-            } else {
-                reloadPage();
-            }
-        });
+        // Allow future deaths again after reset finishes
+        this._isRestarting = false;
     }
 
 	//new transitioning method with smooth lerp and optional transition text
@@ -1144,6 +1147,85 @@ export class GameSystem extends System {
 
         if (this._debugDisplay) {
             this._debugDisplay.visible = true;
+        }
+    }
+
+    _resetToLevel1(global, player) {
+        const level1 = Constants.LEVELS['level-1'];
+
+        // Reset active level state
+        global.levelId = 'level-1';
+        global.level = level1;
+        this._activeLevel = level1;
+
+        // Clear transition flags
+        this._levelTransition = null;
+        this._transitionGraceTimer = 0;
+        this._isLevelTransitioning = false;
+
+        // Reset flap tracking
+        this._flapData = {
+            left: { y: null, distance: 0, flaps: 0 },
+            right: { y: null, distance: 0, flaps: 0 },
+        };
+
+        // Remove procedural scenes if present
+        const oldCave = global.scene.getObjectByName('proceduralCave');
+        if (oldCave) {
+            global.scene.remove(oldCave);
+        }
+
+        const oldMolten = global.scene.getObjectByName('proceduralMoltenRift');
+        if (oldMolten) {
+            global.scene.remove(oldMolten);
+        }
+
+        // Remove current ring rotator / ring setup
+        if (this._ringRotator && this._ringRotator.parent) {
+            this._ringRotator.parent.remove(this._ringRotator);
+        }
+
+        const strayRing = global.scene.getObjectByName('ring');
+        if (strayRing && strayRing.parent && strayRing.parent.name !== 'gltfScene') {
+            strayRing.parent.remove(strayRing);
+        }
+
+        this._ring = null;
+        this._ringNumber = null;
+        this._ringRotator = null;
+        this._ringTimer = level1.ringInterval;
+
+        // Reset player position back to level-1 start
+        const startY =
+            level1.startingRingY !== undefined ? level1.startingRingY : 4;
+        player.space.position.set(0, startY, 34);
+
+        // Make sure the original GLTF scene exists again
+        let gltfScene = global.scene.getObjectByName('gltfScene');
+
+        if (!gltfScene && global.gltfLoader) {
+            const modelPath = level1.sceneModelPath || Constants.SCENE_MODEL_PATH;
+
+            global.gltfLoader.load(
+                modelPath,
+                (gltf) => {
+                    gltf.scene.name = 'gltfScene';
+                    global.scene.add(gltf.scene);
+                },
+                undefined,
+                (error) => {
+                    console.error('Error loading level-1 scene model:', error);
+                }
+            );
+        }
+
+        // Show lobby-style scoreboard again, hide gameplay HUD until the run starts
+        if (this._scoreBoard) {
+            this._scoreBoard.visible = true;
+        }
+
+        if (this._levelIndicator) {
+            this._levelIndicator.visible = false;
         }
     }
     
