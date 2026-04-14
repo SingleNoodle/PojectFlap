@@ -1,5 +1,5 @@
 /**
- * Procedural cave environment generator for level-3 ("Neon Cavern").
+ * Procedural cave environment generator for levels 3 and 4.
  * Builds the scene entirely from Three.js geometry — no GLTF required.
  */
 
@@ -19,6 +19,7 @@ import {
     PlaneGeometry,
     PointLight,
 } from 'three';
+
 
 // Cave dimensions (all in Three.js units)
 const CAVE_HALF_W = 52;
@@ -69,24 +70,37 @@ export function createNeonRing() {
 	
     return ring;
 }
+/**
+ * creates the molten rift scene for level 4 procedural generated
+ * @param {*} scene 
+ * @returns group object
+ */
 export function createMoltenRift(scene) {
     const group = new Group();
     group.name = 'proceduralMoltenRift';
 
     const FLOOR_Y = 0;
 
-    // Keep the lava route near the gameplay orbit
+    // Gameplay orbit
     const ORBIT_RADIUS = 34;
 
-    // Bigger map footprint
+    // Island footprint
     const PLATFORM_RADIUS = 92;
     const PLATFORM_HEIGHT = 8;
 
-    // Lava path settings
-    const LAVA_SEGMENTS = 120;
-    const LAVA_GLOW_WIDTH = 24;
-    const LAVA_OUTER_WIDTH = 16;
-    const LAVA_CORE_WIDTH = 8;
+    // Raise lava clearly above the top plateau so it is visible
+    const LAVA_SURFACE_Y = FLOOR_Y + 2.8;
+
+    // Orbit lava path settings
+    const LAVA_SEGMENTS = 72;
+    const LAVA_GLOW_WIDTH = 34;
+    const LAVA_OUTER_WIDTH = 22;
+    const LAVA_CORE_WIDTH = 12;
+
+    // Central lava lake settings
+    const LAKE_GLOW_RADIUS = 42;
+    const LAKE_OUTER_RADIUS = 34;
+    const LAKE_CORE_RADIUS = 26;
 
     // Atmosphere
     scene.fog = new FogExp2(0x52160a, 0.0025);
@@ -105,7 +119,6 @@ export function createMoltenRift(scene) {
         metalness: 0,
     });
 
-    // Thick island base
     const islandBase = new Mesh(
         new CylinderGeometry(
             PLATFORM_RADIUS * 0.94,
@@ -113,12 +126,11 @@ export function createMoltenRift(scene) {
             PLATFORM_HEIGHT,
             10
         ),
-        baseMat,
+        baseMat
     );
     islandBase.position.y = FLOOR_Y - PLATFORM_HEIGHT / 2;
     group.add(islandBase);
 
-    // Top plateau
     const islandTop = new Mesh(
         new CylinderGeometry(
             PLATFORM_RADIUS * 0.98,
@@ -126,18 +138,103 @@ export function createMoltenRift(scene) {
             2.4,
             10
         ),
-        topMat,
+        topMat
     );
     islandTop.position.y = FLOOR_Y + 0.6;
     group.add(islandTop);
 
-    // ---------- LAVA BED ON ORBIT PATH ----------
-    const lavaOuterColors = [0xff4a1c, 0xff5f1f, 0xff7700, 0xff2a00];
+    // ---------- SHARED LAVA MATERIALS ----------
+    // Main lake glow
+    const lakeGlowMat = new MeshBasicMaterial({
+        color: 0xff6a22,
+        transparent: true,
+        opacity: 0.5,
+        depthWrite: false,
+    });
 
+    const lakeBodyMat = new MeshStandardMaterial({
+        color: 0xfff0a0,
+        emissive: new Color(0xffc040),
+        emissiveIntensity: 5.8,
+        roughness: 0.05,
+        metalness: 0,
+        depthWrite: false,
+    });
+
+    const hotspotMat = new MeshStandardMaterial({
+        color: 0xffffcc,
+        emissive: new Color(0xffdd77),
+        emissiveIntensity: 5.5,
+        roughness: 0.04,
+        metalness: 0,
+        depthWrite: false,
+    });
+
+    // Brighter path glow than the lake halo
+    const pathGlowMat = new MeshBasicMaterial({
+        color: 0xff7a2a,
+        transparent: true,
+        opacity: 0.68,
+        depthWrite: false,
+    });
+
+    const pathOuterMat = new MeshStandardMaterial({
+        color: 0xff7a22,
+        emissive: new Color(0xff6a22),
+        emissiveIntensity: 4.6,
+        roughness: 0.12,
+        metalness: 0,
+        depthWrite: false,
+    });
+
+    const pathCoreMat = new MeshStandardMaterial({
+        color: 0xffffcc,
+        emissive: new Color(0xffdd66),
+        emissiveIntensity: 6.2,
+        roughness: 0.04,
+        metalness: 0,
+        depthWrite: false,
+    });
+
+    // ---------- CENTRAL LAVA LAKE ----------
+    const lakeGlow = new Mesh(
+        new CylinderGeometry(LAKE_GLOW_RADIUS, LAKE_GLOW_RADIUS, 0.24, 28),
+        lakeGlowMat
+    );
+    lakeGlow.position.y = LAVA_SURFACE_Y + 0.0;
+    lakeGlow.renderOrder = 1;
+    group.add(lakeGlow);
+
+    const lakeBody = new Mesh(
+        new CylinderGeometry(LAKE_OUTER_RADIUS, LAKE_OUTER_RADIUS, 0.32, 28),
+        lakeBodyMat
+    );
+    lakeBody.position.y = LAVA_SURFACE_Y + 0.08;
+    lakeBody.renderOrder = 2;
+    group.add(lakeBody);
+
+    const lakeHotCenter = new Mesh(
+        new CylinderGeometry(
+            LAKE_CORE_RADIUS * 0.72,
+            LAKE_CORE_RADIUS * 0.72,
+            0.38,
+            28
+        ),
+        hotspotMat
+    );
+    lakeHotCenter.position.y = LAVA_SURFACE_Y + 0.16;
+    lakeHotCenter.renderOrder = 3;
+    group.add(lakeHotCenter);
+
+    const lakeLight = new PointLight(0xff9a33, 12, 65);
+    lakeLight.position.set(0, LAVA_SURFACE_Y + 3.4, 0);
+    group.add(lakeLight);
+
+    // ---------- LAVA BED ON ORBIT PATH ----------
     for (let i = 0; i < LAVA_SEGMENTS; i++) {
         const t = (i / LAVA_SEGMENTS) * Math.PI * 2;
 
-        // Keep it on the orbit, but add slight wobble so it feels more natural
+        // Slight wobble so the path feels more natural
         const radialOffset =
             Math.sin(t * 3.0) * 2.8 +
             Math.sin(t * 6.0) * 1.1;
@@ -159,76 +256,56 @@ export function createMoltenRift(scene) {
 
         const tangentAngle = Math.atan2(nextX - x, nextZ - z);
 
-        const outerColor = lavaOuterColors[i % lavaOuterColors.length];
-
-        // --- Big glow halo (stronger glow)
+        // Big bright halo
         const lavaGlow = new Mesh(
-            new PlaneGeometry(LAVA_GLOW_WIDTH, 5.2),
-            new MeshBasicMaterial({
-                color: 0xff6a1f,
-                transparent: true,
-                opacity: 0.42,
-            }),
+            new PlaneGeometry(LAVA_GLOW_WIDTH, 6.2),
+            pathGlowMat
         );
         lavaGlow.rotation.x = -Math.PI / 2;
         lavaGlow.rotation.z = tangentAngle;
-        lavaGlow.position.set(x, FLOOR_Y + 0.02, z);
+        lavaGlow.position.set(x, LAVA_SURFACE_Y + 0.0, z);
+        lavaGlow.renderOrder = 4;
         group.add(lavaGlow);
 
-        // --- Outer lava band
+        // Hot outer band
         const lavaOuter = new Mesh(
-            new PlaneGeometry(LAVA_OUTER_WIDTH, 4.0),
-            new MeshStandardMaterial({
-                color: outerColor,
-                emissive: new Color(outerColor),
-                emissiveIntensity: 2.8,
-                roughness: 0.35,
-                metalness: 0,
-            }),
+            new PlaneGeometry(LAVA_OUTER_WIDTH, 4.8),
+            pathOuterMat
         );
         lavaOuter.rotation.x = -Math.PI / 2;
         lavaOuter.rotation.z = tangentAngle;
-        lavaOuter.position.set(x, FLOOR_Y + 0.04, z);
+        lavaOuter.position.set(x, LAVA_SURFACE_Y + 0.08, z);
+        lavaOuter.renderOrder = 5;
         group.add(lavaOuter);
 
-        // --- Bright core
+        // White-hot core
         const lavaCore = new Mesh(
-            new PlaneGeometry(LAVA_CORE_WIDTH, 2.5),
-            new MeshStandardMaterial({
-                color: 0xffe08a,
-                emissive: new Color(0xffa033),
-                emissiveIntensity: 3.6,
-                roughness: 0.15,
-                metalness: 0,
-            }),
+            new PlaneGeometry(LAVA_CORE_WIDTH, 3.0),
+            pathCoreMat
         );
         lavaCore.rotation.x = -Math.PI / 2;
         lavaCore.rotation.z = tangentAngle;
-        lavaCore.position.set(x, FLOOR_Y + 0.06, z);
+        lavaCore.position.set(x, LAVA_SURFACE_Y + 0.16, z);
+        lavaCore.renderOrder = 6;
         group.add(lavaCore);
 
-        // --- Hotspots
-        if (i % 4 === 0) {
+        // Extra glowing hotspots
+        if (i % 6 === 0) {
             const hotspot = new Mesh(
-                new PlaneGeometry(LAVA_CORE_WIDTH * 0.42, 1.2),
-                new MeshStandardMaterial({
-                    color: 0xffffcc,
-                    emissive: new Color(0xffcc55),
-                    emissiveIntensity: 4.2,
-                    roughness: 0.08,
-                    metalness: 0,
-                }),
+                new PlaneGeometry(LAVA_CORE_WIDTH * 0.52, 1.5),
+                hotspotMat
             );
             hotspot.rotation.x = -Math.PI / 2;
             hotspot.rotation.z = tangentAngle;
-            hotspot.position.set(x, FLOOR_Y + 0.08, z);
+            hotspot.position.set(x, LAVA_SURFACE_Y + 0.24, z);
+            hotspot.renderOrder = 7;
             group.add(hotspot);
         }
 
-        // --- Sparse point lights
-        if (i % 6 === 0) {
-            const lavaLight = new PointLight(0xff6622, 6.5, 28);
-            lavaLight.position.set(x, FLOOR_Y + 2.0, z);
+        // Sparse lights for glow without too much performance cost
+        if (i % 12 === 0) {
+            const lavaLight = new PointLight(0xff7a22, 5.5, 24);
+            lavaLight.position.set(x, LAVA_SURFACE_Y + 2.0, z);
             group.add(lavaLight);
         }
     }
@@ -257,7 +334,6 @@ export function createMoltenRift(scene) {
     const createVolcano = (x, z, baseRadius, height) => {
         const volcano = new Group();
 
-        // Main volcano stump
         const body = new Mesh(
             new CylinderGeometry(
                 baseRadius * 0.58,
@@ -265,12 +341,11 @@ export function createMoltenRift(scene) {
                 height,
                 8
             ),
-            volcanoBodyMat.clone(),
+            volcanoBodyMat.clone()
         );
         body.position.y = FLOOR_Y + height / 2;
         volcano.add(body);
 
-        // Top rim
         const rim = new Mesh(
             new CylinderGeometry(
                 baseRadius * 0.76,
@@ -278,12 +353,11 @@ export function createMoltenRift(scene) {
                 1.2,
                 8
             ),
-            volcanoRimMat.clone(),
+            volcanoRimMat.clone()
         );
         rim.position.y = FLOOR_Y + height;
         volcano.add(rim);
 
-        // Crater lava
         const crater = new Mesh(
             new CylinderGeometry(
                 baseRadius * 0.42,
@@ -291,13 +365,12 @@ export function createMoltenRift(scene) {
                 0.9,
                 8
             ),
-            craterLavaMat.clone(),
+            craterLavaMat.clone()
         );
         crater.position.y = FLOOR_Y + height - 0.05;
         volcano.add(crater);
 
-        // Crater glow light
-        const craterLight = new PointLight(0xff7a22, 8, 26);
+        const craterLight = new PointLight(0xff7a22, 5, 18);
         craterLight.position.set(0, FLOOR_Y + height + 1.8, 0);
         volcano.add(craterLight);
 
@@ -305,25 +378,22 @@ export function createMoltenRift(scene) {
         group.add(volcano);
     };
 
-    // ---------- REAL VOLCANOES ----------
-    // Place them near the path but not directly blocking it
+    // ---------- VOLCANOES ----------
     createVolcano(-48, -28, 10, 13);
     createVolcano(46, -16, 11, 15);
     createVolcano(52, 34, 9, 12);
     createVolcano(-26, 56, 8, 10);
     createVolcano(0, -62, 14, 18);
 
-    // ---------- CHUNKY LOW-POLY ROCKS ----------
+    // ---------- ROCKS ----------
     const rockMat = new MeshStandardMaterial({
         color: 0x4a2016,
         roughness: 0.95,
         metalness: 0,
     });
 
-    for (let i = 0; i < 28; i++) {
+    for (let i = 0; i < 16; i++) {
         const angle = Math.random() * Math.PI * 2;
-
-        // Keep rocks outside the clean flight band
         const radius =
             ORBIT_RADIUS +
             (Math.random() > 0.5 ? 18 : -18) +
@@ -333,40 +403,40 @@ export function createMoltenRift(scene) {
 
         const rock = new Mesh(
             new DodecahedronGeometry(size, 0),
-            rockMat.clone(),
+            rockMat.clone()
         );
 
         rock.position.set(
             Math.cos(angle) * radius,
             FLOOR_Y + size * 0.35,
-            Math.sin(angle) * radius,
+            Math.sin(angle) * radius
         );
 
         rock.rotation.set(
             Math.random() * Math.PI,
             Math.random() * Math.PI,
-            Math.random() * Math.PI,
+            Math.random() * Math.PI
         );
 
         group.add(rock);
     }
 
     // ---------- EDGE CLIFF CHUNKS ----------
-    for (let i = 0; i < 18; i++) {
-        const angle = (i / 18) * Math.PI * 2;
+    for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2;
         const radius = PLATFORM_RADIUS - 8 + Math.random() * 4;
         const h = 8 + Math.random() * 12;
         const r = 4 + Math.random() * 5;
 
         const cliff = new Mesh(
             new CylinderGeometry(r * 0.82, r, h, 6),
-            rockMat.clone(),
+            rockMat.clone()
         );
 
         cliff.position.set(
             Math.cos(angle) * radius,
             FLOOR_Y + h / 2 - 2,
-            Math.sin(angle) * radius,
+            Math.sin(angle) * radius
         );
 
         group.add(cliff);
@@ -374,6 +444,9 @@ export function createMoltenRift(scene) {
 
     return group;
 }
+
+
+
 
 /**
  * Builds the procedural cave environment and returns a Group.

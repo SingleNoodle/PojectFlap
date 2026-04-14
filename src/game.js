@@ -7,14 +7,16 @@
 
 import { Constants, GlobalComponent } from './global';
 import {
-	Group,
-	Mesh,
-	MeshBasicMaterial,
-	PlaneGeometry,
-	SRGBColorSpace,
-	TextureLoader,
-	Vector3,
-	Quaternion,
+    BackSide,
+    Group,
+    Mesh,
+    MeshBasicMaterial,
+    PlaneGeometry,
+    SRGBColorSpace,
+    SphereGeometry,
+    TextureLoader,
+    Vector3,
+    Quaternion,
 } from 'three';
 import { createNeonRing, createProceduralCave, createMoltenRift } from './proceduralMap';
 
@@ -34,10 +36,12 @@ SCORE_BOARD_TEXTURE.colorSpace = SRGBColorSpace;
  */
 export class GameSystem extends System {
 	init() {
-		this._initializeProperties();
-		this._cacheScoreboardElements();
-		this._loadStoredData();
-	}
+        this._initializeProperties();
+        this._cacheScoreboardElements();
+        this._loadStoredData();
+        this._initializeTransitionOverlay();
+    }
+
 
 	_initializeProperties() {
 		this._activeLevel = Constants.LEVELS[Constants.DEFAULT_LEVEL_ID];
@@ -51,6 +55,8 @@ export class GameSystem extends System {
 		this._ringTimer = this._activeLevel.ringInterval;
 		this._scoreBoard = null;
 		this._levelIndicator = null;
+		this._transitionScreen = null;
+		this._transitionScreenText = null;
 		this._playerId = null;
 		this._record = 0;
 		this._latest = 0;
@@ -235,6 +241,8 @@ export class GameSystem extends System {
 			global.camera.add(this._debugDisplay);
 			this._debugDisplay.position.set(0, 0.25, -1.4);
 		}
+		//for black screen
+		this._ensureTransitionScreen(global);
 
 		// Initialize ring once
 		if (!this._ring && global.scene.getObjectByName('ring')) {
@@ -432,7 +440,7 @@ export class GameSystem extends System {
         // Level 1 -> Level 2
         if (
             !this._levelTransition &&
-            global.score >= 1 &&
+            global.score >= 4 &&
             currentLevelId === 'level-1'
         ) {
             console.log('Level complete! Transitioning to level-2...');
@@ -440,28 +448,32 @@ export class GameSystem extends System {
             return;
         }
 
+
+
         // Level 2 -> Level 3
         if (
             !this._isLevelTransitioning &&
             currentLevelId === 'level-2' &&
-            global.score >= 2
+            global.score >= 6
         ) {
             this._isLevelTransitioning = true;
             console.log('Level complete! Advancing to level-3: Neon Cavern...');
-            this._transitionToLevel3(player, global, rotator, motionProfile);
+            this._beginLevelTransition('level-3', global);
             this._isLevelTransitioning = false;
             return;
         }
+
+
 
         // Level 3 -> Level 4
         if (
             !this._isLevelTransitioning &&
             currentLevelId === 'level-3' &&
-            global.score >= 4
+            global.score >= 8
         ) {
             this._isLevelTransitioning = true;
             console.log('Level complete! Advancing to level-4: Molten Rift...');
-            this._transitionToLevel4(player, global, rotator, motionProfile);
+            this._beginLevelTransition('level-4', global);
             this._isLevelTransitioning = false;
             return;
         }
@@ -620,6 +632,7 @@ export class GameSystem extends System {
 
 		this._ring = ring;
 
+
 		// Recreate / reattach number text to the NEW ring
 		if (this._ringNumber && this._ringNumber.parent) {
 			this._ringNumber.parent.remove(this._ringNumber);
@@ -664,43 +677,59 @@ export class GameSystem extends System {
         const nextLevelId = 'level-4';
         const nextLevel = Constants.LEVELS[nextLevelId];
 
+        // Update level state
         global.levelId = nextLevelId;
         global.level = nextLevel;
         this._activeLevel = nextLevel;
 
+        // Remove old level-3 cave
         const oldCave = global.scene.getObjectByName('proceduralCave');
-        if (oldCave) global.scene.remove(oldCave);
+        if (oldCave) {
+            global.scene.remove(oldCave);
+        }
 
+        // Remove old molten rift if somehow already present
         const oldMolten = global.scene.getObjectByName('proceduralMoltenRift');
-        if (oldMolten) global.scene.remove(oldMolten);
+        if (oldMolten) {
+            global.scene.remove(oldMolten);
+        }
 
+        // Remove old ring rotator
         if (this._ringRotator && this._ringRotator.parent) {
             this._ringRotator.parent.remove(this._ringRotator);
         }
 
-        const cave = createMoltenRift(global.scene);
-        global.scene.add(cave);
+        // Build level-4 environment
+        const moltenRift = createMoltenRift(global.scene);
+        global.scene.add(moltenRift);
 
-        const startY = nextLevel.startingRingY ?? 8;
+        // Spawn player
+        const startY =
+            nextLevel.startingRingY !== undefined ? nextLevel.startingRingY : 8;
         const playerLocalX = 0;
         const playerLocalZ = -34;
 
         player.space.position.set(playerLocalX, startY, playerLocalZ);
 
+        // Create ring
         const ring = createNeonRing();
         ring.position.set(playerLocalX, startY, playerLocalZ);
         ring.scale.setScalar(nextLevel.startingRingScale);
 
+        // Create new ring rotator
         this._ringRotator = new Group();
         this._ringRotator.add(ring);
         global.scene.add(this._ringRotator);
 
         this._ring = ring;
+
+        // Clamp only for level 4 so ring stays above lava/floor
         this._ring.position.y = this._clampRingYForFloor(
             this._ring.position.y,
             nextLevel
         );
 
+        // Rebuild ring number text
         if (this._ringNumber && this._ringNumber.parent) {
             this._ringNumber.parent.remove(this._ringNumber);
         }
@@ -716,6 +745,7 @@ export class GameSystem extends System {
         this._ring.add(ringNumber);
         this._ringNumber = ringNumber;
 
+        // Match ring timing and rotation to current level settings
         const effectiveAngularSpeed =
             motionProfile.angularSpeed * this._getAngularDirection();
 
@@ -730,6 +760,11 @@ export class GameSystem extends System {
 
         this._ringTimer = nextLevel.ringInterval * ringLeadMultiplier;
         this._transitionGraceTimer = 2.0;
+
+        if (this._debugDisplay) {
+            this._debugDisplay.text = `Score: ${global.score} | Level: ${global.levelId} | Active: ${this._activeLevel.name}`;
+            this._debugDisplay.sync();
+        }
     }
 	
 
@@ -763,46 +798,42 @@ export class GameSystem extends System {
 
 	//new transitioning method with smooth lerp and optional transition text
 	_beginLevel2Transition(player, global) {
-		const nextLevelId = 'level-2';
-		const nextLevel = Constants.LEVELS[nextLevelId];
+        this._beginLevelTransition('level-2', global);
+    }
 
-		if (this._ring) {
-			this._ring.visible = false;
-		}
-
-		if (this._levelIndicator) {
-			this._levelIndicator.text = 'Level 2';
-			this._levelIndicator.sync();
-		}
-
-		global.gameState = 'transition';
-
-		this._levelTransition = {
-			nextLevelId,
-			nextLevel,
-			elapsed: 0,
-			duration: 0.2,
-		};
-	}
 
 
 
 	_updateLevelTransition(player, global, rotator, delta, motionProfile) {
-		if (!this._levelTransition) {
-			return;
-		}
+        if (!this._levelTransition) {
+            return;
+        }
 
-		this._levelTransition.elapsed += delta;
+        this._levelTransition.elapsed += delta;
 
-		if (this._debugDisplay) {
-			this._debugDisplay.text = `Transition...`;
-			this._debugDisplay.sync();
-		}
+        if (this._debugDisplay) {
+            this._debugDisplay.text = `Transition...`;
+            this._debugDisplay.sync();
+        }
 
-		if (this._levelTransition.elapsed >= this._levelTransition.duration) {
-			this._finishLevel2Transition(player, global, rotator, motionProfile);
-		}
-	}
+        if (this._levelTransition.elapsed >= this._levelTransition.duration) {
+            const { nextLevelId } = this._levelTransition;
+
+            if (nextLevelId === 'level-2') {
+                this._finishLevel2Transition(player, global, rotator, motionProfile);
+            } else if (nextLevelId === 'level-3') {
+                this._transitionToLevel3(player, global, rotator, motionProfile);
+                global.gameState = 'ingame';
+                this._levelTransition = null;
+            } else if (nextLevelId === 'level-4') {
+                this._transitionToLevel4(player, global, rotator, motionProfile);
+                global.gameState = 'ingame';
+                this._levelTransition = null;
+            }
+
+            this._hideTransitionScreen();
+        }
+    }
 
 	_finishLevel2Transition(player, global, rotator, motionProfile) {
 		const { nextLevelId, nextLevel } = this._levelTransition;
@@ -857,6 +888,162 @@ export class GameSystem extends System {
 			this._debugDisplay.sync();
 		}
 	}
+	_initializeTransitionOverlay() {
+        if (typeof document === 'undefined') {
+            return;
+        }
+
+        let overlay = document.getElementById('level-transition-overlay');
+
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'level-transition-overlay';
+            overlay.style.position = 'fixed';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+            overlay.style.width = '100vw';
+            overlay.style.height = '100vh';
+            overlay.style.background = 'black';
+            overlay.style.color = 'white';
+            overlay.style.display = 'none';
+            overlay.style.alignItems = 'center';
+            overlay.style.justifyContent = 'center';
+            overlay.style.textAlign = 'center';
+            overlay.style.padding = '40px';
+            overlay.style.zIndex = '99999';
+            overlay.style.fontFamily = 'Arial, sans-serif';
+            overlay.style.fontSize = '32px';
+            overlay.style.fontWeight = 'bold';
+            overlay.style.lineHeight = '1.4';
+            overlay.style.whiteSpace = 'pre-line';
+            document.body.appendChild(overlay);
+        }
+
+        this._transitionOverlay = overlay;
+    }
+
+    _showTransitionOverlay(currentLevelName, nextLevelName) {
+        if (!this._transitionOverlay) {
+            return;
+        }
+
+        this._transitionOverlay.textContent =
+            `Congratulations, you passed ${currentLevelName}.\nLoading next level: ${nextLevelName}.`;
+
+        this._transitionOverlay.style.display = 'flex';
+    }
+
+    _hideTransitionOverlay() {
+        if (!this._transitionOverlay) {
+            return;
+        }
+
+        this._transitionOverlay.style.display = 'none';
+    }
+
+    _beginLevelTransition(nextLevelId, global) {
+        const nextLevel = Constants.LEVELS[nextLevelId];
+
+        if (!nextLevel) {
+            return;
+        }
+
+        if (this._ring) {
+            this._ring.visible = false;
+        }
+
+        global.gameState = 'transition';
+
+        this._showTransitionScreen(global, this._activeLevel.name, nextLevel.name);
+
+        this._levelTransition = {
+            nextLevelId,
+            nextLevel,
+            elapsed: 0,
+            duration: 5.0,
+        };
+    }
+	_ensureTransitionScreen(global) {
+        if (this._transitionScreen) {
+            return;
+        }
+
+        const screenGroup = new Group();
+        screenGroup.visible = false;
+
+        // Big black sphere around the camera so the whole headset view goes dark
+        const blackSphere = new Mesh(
+            new SphereGeometry(8, 16, 16),
+            new MeshBasicMaterial({
+                color: 0x000000,
+                side: BackSide,
+                depthTest: false,
+                depthWrite: false,
+            })
+        );
+        blackSphere.renderOrder = 9999;
+        screenGroup.add(blackSphere);
+
+        const transitionText = new Text();
+        transitionText.text = '';
+        transitionText.fontSize = 0.18;
+        transitionText.anchorX = 'center';
+        transitionText.anchorY = 'middle';
+        transitionText.textAlign = 'center';
+        transitionText.maxWidth = 3.2;
+        transitionText.color = 0xffffff;
+        transitionText.position.set(0, 0, -2.5);
+        transitionText.renderOrder = 10000;
+        transitionText.sync();
+
+        screenGroup.add(transitionText);
+
+        global.camera.add(screenGroup);
+
+        this._transitionScreen = screenGroup;
+        this._transitionScreenText = transitionText;
+    }
+
+    _showTransitionScreen(global, currentLevelName, nextLevelName) {
+        this._ensureTransitionScreen(global);
+
+        if (this._transitionScreenText) {
+            this._transitionScreenText.text =
+                `Congratulations, you passed ${currentLevelName}.\nLoading next level: ${nextLevelName}.`;
+            this._transitionScreenText.sync();
+        }
+
+        if (this._transitionScreen) {
+            this._transitionScreen.visible = true;
+        }
+
+        if (this._levelIndicator) {
+            this._levelIndicator.visible = false;
+        }
+
+        if (this._debugDisplay) {
+            this._debugDisplay.visible = false;
+        }
+
+        if (this._scoreBoard) {
+            this._scoreBoard.visible = false;
+        }
+    }
+
+    _hideTransitionScreen() {
+        if (this._transitionScreen) {
+            this._transitionScreen.visible = false;
+        }
+
+        if (this._levelIndicator) {
+            this._levelIndicator.visible = true;
+        }
+
+        if (this._debugDisplay) {
+            this._debugDisplay.visible = true;
+        }
+    }
+    
 
 	_updateGameplayHud(global) {
 		if (!this._levelIndicator) {
@@ -886,7 +1073,9 @@ export class GameSystem extends System {
     }
 
     _usesLevel4FloorClamp(level = this._activeLevel) {
-        return level === Constants.LEVELS['level-4'];
+        return (
+            level === Constants.LEVELS['level-4']
+        );
     }
 
 	_getRingPassRadius(level = this._activeLevel) {
