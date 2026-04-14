@@ -72,6 +72,18 @@ export const Constants = {
 			proceduralScene: true,
 			angularDirection: -1,
 		},
+		'level-4': {
+			name: 'Molten Rift',
+			ringInterval: 1.45,
+			startingRingScale: 3.1,
+			ringShrinkMultiplier: 0.93,
+			ringMinY: 3,
+			ringMaxY: 16,
+			startingRingY: 8,
+			proceduralScene: true,
+			angularDirection: -1,
+			ringLeadMultiplier: 2.0,
+		},
 	},
 
 	// asset paths

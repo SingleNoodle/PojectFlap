@@ -16,7 +16,7 @@ import {
 	Vector3,
 	Quaternion,
 } from 'three';
-import { createNeonRing, createProceduralCave } from './proceduralMap';
+import { createNeonRing, createProceduralCave, createMoltenRift } from './proceduralMap';
 
 import { PlayerComponent } from './player';
 import { System } from 'elics';
@@ -430,13 +430,28 @@ export class GameSystem extends System {
 			this._isLevelTransitioning = false;
 			return;
 		}
+		if (
+			!this._isLevelTransitioning &&
+			currentLevelId == 'level-3' &&
+			global.score >=4
+		){
+			this._isLevelTransitioning = true;
+			console.log('Level complete! Advancing to level-4: Molten Rift...');
+			this._transitionToLevel4(player, global, rotator, motionProfile);
+			this.isLevelTransitioning = false;
+			return;
+		}
 
 		const effectiveAngularSpeed =
 			motionProfile.angularSpeed * this._getAngularDirection();
 
+		const ringLeadMultiplier = this._activeLevel.ringLeadMultiplier ?? 1.0;
+
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			effectiveAngularSpeed * this._activeLevel.ringInterval,
+			effectiveAngularSpeed *
+				this._activeLevel.ringInterval *
+				ringLeadMultiplier,
 		);
 
 		// Generate ring position
@@ -576,9 +591,12 @@ export class GameSystem extends System {
 		const effectiveAngularSpeed =
 			motionProfile.angularSpeed * this._getAngularDirection();
 
+		const ringLeadMultiplier = nextLevel.ringLeadMultiplier ?? 1.0;
 		this._ringRotator.quaternion.copy(rotator.quaternion);
 		this._ringRotator.rotateY(
-			effectiveAngularSpeed * nextLevel.ringInterval * 2
+			effectiveAngularSpeed *
+				nextLevel.ringInterval *
+				ringLeadMultiplier
 		);
 
 		this._ringTimer = nextLevel.ringInterval;
@@ -592,6 +610,69 @@ export class GameSystem extends System {
 		console.log('Ring local pos:', this._ring.position);
 		console.log('Ring object:', this._ring);
 	}
+	_transitionToLevel4(player, global, rotator, motionProfile) {
+		const nextLevelId = 'level-4';
+		const nextLevel = Constants.LEVELS[nextLevelId];
+
+		global.levelId = nextLevelId;
+		global.level = nextLevel;
+		this._activeLevel = nextLevel;
+
+		const oldCave = global.scene.getObjectByName('proceduralCave');
+		if (oldCave) global.scene.remove(oldCave);
+
+		const oldMolten = global.scene.getObjectByName('proceduralMoltenRift');
+		if (oldMolten) global.scene.remove(oldMolten);
+
+		if (this._ringRotator && this._ringRotator.parent) {
+			this._ringRotator.parent.remove(this._ringRotator);
+		}
+
+		const cave = createMoltenRift(global.scene);
+		global.scene.add(cave);
+
+		const startY = nextLevel.startingRingY ?? 8;
+		const playerLocalX = 0;
+		const playerLocalZ = -34;
+
+		player.space.position.set(playerLocalX, startY, playerLocalZ);
+
+		const ring = createNeonRing();
+		ring.position.set(playerLocalX, startY, playerLocalZ);
+		ring.scale.setScalar(nextLevel.startingRingScale);
+
+		this._ringRotator = new Group();
+		this._ringRotator.add(ring);
+		global.scene.add(this._ringRotator);
+
+		this._ring = ring;
+
+		if (this._ringNumber && this._ringNumber.parent) {
+			this._ringNumber.parent.remove(this._ringNumber);
+		}
+
+		const ringNumber = new Text();
+		ringNumber.text = (global.score + 1).toString();
+		ringNumber.fontSize = 0.6;
+		ringNumber.anchorX = 'center';
+		ringNumber.anchorY = 'middle';
+		ringNumber.rotateY(Math.PI);
+		ringNumber.sync();
+
+		this._ring.add(ringNumber);
+		this._ringNumber = ringNumber;
+
+		const effectiveAngularSpeed =
+			motionProfile.angularSpeed * this._getAngularDirection();
+
+		this._ringRotator.quaternion.copy(rotator.quaternion);
+		this._ringRotator.rotateY(
+			effectiveAngularSpeed * nextLevel.ringInterval * 2.0
+		);
+
+		this._ringTimer = nextLevel.ringInterval;
+		this._transitionGraceTimer = 2.0;
+	}	
 
 
 
