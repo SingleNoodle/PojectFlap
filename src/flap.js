@@ -164,15 +164,24 @@ const flapSpeed = bothFlapping
 		return Math.atan(Math.abs(this._vec3.y) / Math.abs(this._vec3.x));
 	}
 
-	_adjustGravityBasedOnWingAngle(wingAngle, gravity) {
-		let gravityAdjusted = gravity;
-		if (wingAngle < 0.2) {
-			gravityAdjusted *= 0.5;
-		} else if (wingAngle < 0.5) {
-			gravityAdjusted *= ((wingAngle - 0.2) / 0.3) * 0.5 + 0.5;
-		}
-		return gravityAdjusted;
-	}
+	_adjustGravityBasedOnWingAngle(wingAngle) {
+        let gravityAdjusted = Constants.GRAVITY;
+
+        // Glide: wings more horizontal / spread out
+        if (wingAngle < 0.2) {
+            gravityAdjusted *= 0.5;
+        }
+        // Smooth transition back to normal gravity
+        else if (wingAngle < 0.5) {
+            gravityAdjusted *= ((wingAngle - 0.2) / 0.3) * 0.5 + 0.5;
+        }
+        // Dive: wings tucked in / steep angle
+        else if (wingAngle > 1.1) {
+            gravityAdjusted *= 1.9;
+        }
+
+        return gravityAdjusted;
+    }
 }
 
 FlapSystem.queries = {
