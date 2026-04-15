@@ -518,7 +518,7 @@ export class GameSystem extends System {
         // Level 1 -> Level 2
         if (
             !this._levelTransition &&
-            global.score >= 4 &&
+            global.score >= 20 &&
             currentLevelId === 'level-1'
         ) {
             console.log('Level complete! Transitioning to level-2...');
@@ -532,7 +532,7 @@ export class GameSystem extends System {
         if (
             !this._isLevelTransitioning &&
             currentLevelId === 'level-2' &&
-            global.score >= 6
+            global.score >= 40
         ) {
             this._isLevelTransitioning = true;
             console.log('Level complete! Advancing to level-3: Neon Cavern...');
@@ -547,7 +547,7 @@ export class GameSystem extends System {
         if (
             !this._isLevelTransitioning &&
             currentLevelId === 'level-3' &&
-            global.score >= 8
+            global.score >= 50
         ) {
             this._isLevelTransitioning = true;
             console.log('Level complete! Advancing to level-4: Molten Rift...');
