@@ -170,27 +170,27 @@ export function createMoltenRift(scene) {
         depthWrite: false,
     });
 
-    // Brighter path glow than the lake halo
+    // Make the lava path match the bright center-core palette
     const pathGlowMat = new MeshBasicMaterial({
-        color: 0xff7a2a,
+        color: 0xffe08a,
         transparent: true,
-        opacity: 0.68,
+        opacity: 0.62,
         depthWrite: false,
     });
 
     const pathOuterMat = new MeshStandardMaterial({
-        color: 0xff7a22,
-        emissive: new Color(0xff6a22),
-        emissiveIntensity: 4.6,
-        roughness: 0.12,
+        color: 0xfff0a0,
+        emissive: new Color(0xffc040),
+        emissiveIntensity: 5.8,
+        roughness: 0.05,
         metalness: 0,
         depthWrite: false,
     });
 
     const pathCoreMat = new MeshStandardMaterial({
         color: 0xffffcc,
-        emissive: new Color(0xffdd66),
-        emissiveIntensity: 6.2,
+        emissive: new Color(0xffdd77),
+        emissiveIntensity: 6.6,
         roughness: 0.04,
         metalness: 0,
         depthWrite: false,

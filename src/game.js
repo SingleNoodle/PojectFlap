@@ -318,37 +318,44 @@ export class GameSystem extends System {
 	}
 
 	_handleLobbyState(player, rotator, isPresenting, global, motionProfile) {
-        if (isPresenting) {
-            // Show original in-world scoreboard in lobby
-            if (this._scoreBoard) {
-                this._scoreBoard.visible = true;
-            }
+        if (!isPresenting) {
+            return;
+        }
 
-            // Hide bottom-left HUD while the scoreboard is visible,
-            // so it feels like the original repo.
-            if (this._levelIndicator) {
-                this._levelIndicator.visible = false;
-            }
+        // Show original in-world scoreboard in lobby
+        if (this._scoreBoard) {
+            this._scoreBoard.visible = true;
+        }
 
-            for (let entry of Object.entries(player.controllers)) {
-                const [handedness, controller] = entry;
-                const thisFrameY = controller.targetRaySpace.position.y;
-                const lastFrameY = this._flapData[handedness].y;
+        // Hide bottom-left HUD while the scoreboard is visible
+        if (this._levelIndicator) {
+            this._levelIndicator.visible = false;
+        }
 
-                this._manageFlapData(handedness, thisFrameY, lastFrameY);
+        // Do not allow a start until the ring system is fully ready
+        if (!this._ring || !this._ringRotator || !this._ringNumber) {
+            return;
+        }
 
-                if (
-                    this._flapData[handedness].flaps >= Constants.NUM_FLAPS_TO_START_GAME
-                ) {
-                    this._startGame(global, rotator, motionProfile);
-                    break;
-                }
+        for (let entry of Object.entries(player.controllers)) {
+            const [handedness, controller] = entry;
+            const thisFrameY = controller.targetRaySpace.position.y;
+            const lastFrameY = this._flapData[handedness].y;
+
+            this._manageFlapData(handedness, thisFrameY, lastFrameY);
+
+            if (
+                this._flapData[handedness].flaps >= Constants.NUM_FLAPS_TO_START_GAME
+            ) {
+                this._startGame(global, rotator, motionProfile);
+                break;
             }
         }
     }
 
+
 	_manageFlapData(handedness, thisFrameY, lastFrameY) {
-		if (lastFrameY) {
+		if (lastFrameY != null) {
 			if (thisFrameY <= lastFrameY) {
 				// flapping
 				this._flapData[handedness].distance += lastFrameY - thisFrameY;
@@ -367,16 +374,30 @@ export class GameSystem extends System {
 	}
 
 	_startGame(global, rotator, motionProfile) {
-		global.gameState = 'ingame';
-		this._currentRunScore = 0;
-		this._updateScoreboardUI();
-		this._currentScore.text = '0';
-		this._currentScore.sync();
-		this._flapData = {
-			left: { y: null, distance: 0, flaps: 0 },
-			right: { y: null, distance: 0, flaps: 0 },
-		};
-		const effectiveAngularSpeed =
+        // Prevent accidental double-starts
+        if (global.gameState !== 'lobby') {
+            return;
+        }
+
+        // Guard against null ring state
+        if (!this._ring || !this._ringRotator || !this._ringNumber) {
+            console.warn('Start blocked: ring system is not ready yet.');
+            return;
+        }
+
+        global.gameState = 'ingame';
+        this._currentRunScore = 0;
+        this._updateScoreboardUI();
+        this._currentScore.text = '0';
+        this._currentScore.sync();
+
+        // Reset flap tracking immediately so stale flap counts don't carry over
+        this._flapData = {
+            left: { y: null, distance: 0, flaps: 0 },
+            right: { y: null, distance: 0, flaps: 0 },
+        };
+
+        const effectiveAngularSpeed =
             motionProfile.angularSpeed * this._getAngularDirection();
 
         const ringLeadMultiplier = this._activeLevel.ringLeadMultiplier ?? 1.0;
@@ -385,7 +406,7 @@ export class GameSystem extends System {
         this._ringRotator.rotateY(
             effectiveAngularSpeed *
                 this._activeLevel.ringInterval *
-                ringLeadMultiplier,
+                ringLeadMultiplier
         );
 
         const startingY =
@@ -403,14 +424,25 @@ export class GameSystem extends System {
             );
         }
 
+        this._ring.visible = true;
         this._ringTimer = this._usesLevel4FloorClamp()
             ? this._activeLevel.ringInterval * ringLeadMultiplier
             : this._activeLevel.ringInterval;
 
-		this._ringNumber.text = '1';
-		this._ringNumber.sync();
-		this._updateGameplayHud(global);
-	}
+        this._ringNumber.text = '1';
+        this._ringNumber.sync();
+
+        if (this._scoreBoard) {
+            this._scoreBoard.visible = false;
+        }
+
+        if (this._levelIndicator) {
+            this._levelIndicator.visible = true;
+        }
+
+        this._updateGameplayHud(global);
+    }
+
 
 	_handleInGameState(player, global, rotator, delta, motionProfile) {
         if (global.gameState !== 'ingame') {
@@ -848,6 +880,12 @@ export class GameSystem extends System {
         this._currentRunScore = 0;
         this._updateScoreboardUI();
 
+        // Reset flap tracking so the next lobby start is clean
+        this._flapData = {
+            left: { y: null, distance: 0, flaps: 0 },
+            right: { y: null, distance: 0, flaps: 0 },
+        };
+
         // Reset gameplay state
         global.gameState = 'lobby';
         global.score = 0;
@@ -862,6 +900,8 @@ export class GameSystem extends System {
 
         // Allow future deaths again after reset finishes
         this._isRestarting = false;
+
+
     }
 
 	//new transitioning method with smooth lerp and optional transition text
@@ -1180,13 +1220,20 @@ export class GameSystem extends System {
             global.scene.remove(oldMolten);
         }
 
+        // Remove old GLTF scene too so level-1 reloads cleanly with a fresh ring
+        const oldGltfScene = global.scene.getObjectByName('gltfScene');
+        if (oldGltfScene) {
+            global.scene.remove(oldGltfScene);
+        }
+
         // Remove current ring rotator / ring setup
         if (this._ringRotator && this._ringRotator.parent) {
             this._ringRotator.parent.remove(this._ringRotator);
         }
 
+        // Remove any leftover ring object if still attached somewhere
         const strayRing = global.scene.getObjectByName('ring');
-        if (strayRing && strayRing.parent && strayRing.parent.name !== 'gltfScene') {
+        if (strayRing && strayRing.parent) {
             strayRing.parent.remove(strayRing);
         }
 
@@ -1200,10 +1247,17 @@ export class GameSystem extends System {
             level1.startingRingY !== undefined ? level1.startingRingY : 4;
         player.space.position.set(0, startY, 34);
 
-        // Make sure the original GLTF scene exists again
-        let gltfScene = global.scene.getObjectByName('gltfScene');
+        // Show lobby scoreboard again, hide gameplay HUD until the run starts
+        if (this._scoreBoard) {
+            this._scoreBoard.visible = true;
+        }
 
-        if (!gltfScene && global.gltfLoader) {
+        if (this._levelIndicator) {
+            this._levelIndicator.visible = false;
+        }
+
+        // Reload level-1 scene fresh so the original ring exists again
+        if (global.gltfLoader) {
             const modelPath = level1.sceneModelPath || Constants.SCENE_MODEL_PATH;
 
             global.gltfLoader.load(
@@ -1217,15 +1271,6 @@ export class GameSystem extends System {
                     console.error('Error loading level-1 scene model:', error);
                 }
             );
-        }
-
-        // Show lobby-style scoreboard again, hide gameplay HUD until the run starts
-        if (this._scoreBoard) {
-            this._scoreBoard.visible = true;
-        }
-
-        if (this._levelIndicator) {
-            this._levelIndicator.visible = false;
         }
     }
     
